@@ -1,0 +1,156 @@
+# =====================================================================
+#  RÉGLAGES DE LA VEILLE — vous pouvez modifier ce fichier librement
+# =====================================================================
+
+# Langue dans laquelle l'IA rédige les synthèses
+langue_synthese: "français"
+
+# ---------------------------------------------------------------------
+# COULEURS disponibles dans Notion : default, gray, brown, orange, yellow,
+# green, blue, purple, pink, red
+# ---------------------------------------------------------------------
+
+# Étiquettes DISCIPLINAIRES (colonne « Discipline ») : l'IA en choisit 1 à 3
+disciplines_couleur: gray
+disciplines:
+  - Géopolitique
+  - Études stratégiques
+  - Économie
+  - Finance
+  - Droit
+  - Science politique
+  - Politique publique
+  - Société française
+  - Sociologie
+  - Histoire
+  - Philosophie & éthique
+  - Santé
+  - Sciences & techniques
+  - Environnement
+  - Démographie
+
+# Étiquettes THÉMATIQUES (colonne « Thèmes ») : l'IA en choisit 1 à 5.
+# Elles sont rangées par familles ; toutes les étiquettes d'une famille ont la même couleur.
+themes:
+  - famille: Sécurité & défense
+    couleur: red
+    etiquettes:
+      - Défense
+      - Armement & industrie de défense
+      - Nucléaire
+      - Conflits armés
+      - Terrorisme
+      - Renseignement
+      - Espace
+      - Mers & océans
+  - famille: Politique & institutions
+    couleur: blue
+    etiquettes:
+      - Union européenne
+      - OTAN & alliances
+      - ONU & multilatéralisme
+      - Diplomatie
+      - Sanctions
+      - Élections
+      - Démocratie & autoritarisme
+      - Droits humains
+      - Justice internationale
+      - Francophonie
+  - famille: Économie & ressources
+    couleur: yellow
+    etiquettes:
+      - Commerce & droits de douane
+      - Monnaie & banques centrales
+      - Dette & finances publiques
+      - Industrie
+      - Minerais & matières premières
+      - Énergie
+      - Agriculture & alimentation
+      - Travail & emploi
+      - Développement & aide
+  - famille: Technologies & information
+    couleur: purple
+    etiquettes:
+      - Intelligence artificielle
+      - Cyber
+      - Réseaux sociaux
+      - Désinformation & influence
+      - Semi-conducteurs & numérique
+  - famille: Environnement
+    couleur: green
+    etiquettes:
+      - Climat
+      - Biodiversité
+      - Eau
+  - famille: Société
+    couleur: pink
+    etiquettes:
+      - Migrations
+      - Inégalités
+      - Éducation
+      - Santé & pandémies
+      - Religions
+      - Genre & droits des femmes
+      - Culture & soft power
+
+# Grandes régions (colonne « Région »). Les PAYS prennent la couleur de leur région.
+regions:
+  - nom: Europe
+    couleur: blue
+  - nom: Russie & Eurasie
+    couleur: purple
+  - nom: Moyen-Orient & Afrique du Nord
+    couleur: orange
+  - nom: Afrique subsaharienne
+    couleur: brown
+  - nom: Asie-Pacifique
+    couleur: red
+  - nom: Amérique du Nord
+    couleur: pink
+  - nom: Amérique latine & Caraïbes
+    couleur: green
+  - nom: Arctique
+    couleur: default
+  - nom: Monde
+    couleur: gray
+
+# Type de publication
+types:
+  - Analyse
+  - Rapport / étude
+  - Note / policy brief
+  - Tribune / commentaire
+  - Entretien
+  - Podcast
+  - Communiqué de presse
+  - Actualité
+  - Données / statistiques
+  - Événement
+
+# ---------------------------------------------------------------------
+# Réglages techniques (les valeurs par défaut conviennent)
+# ---------------------------------------------------------------------
+limites:
+  articles_par_passage: 80        # nombre max d'articles traités à chaque passage (le reste attend le suivant)
+  podcasts_par_passage: 4         # nombre max d'épisodes transcrits à chaque passage
+  articles_par_requete_ia: 4      # regroupement : nb d'articles envoyés ensemble à Gemini (économise le quota)
+  caracteres_max_article: 16000   # texte envoyé à l'IA par article (début + fin du texte)
+  caracteres_max_podcast: 60000   # transcription envoyée à l'IA par épisode
+  jours_premier_passage: 90       # au premier lancement : on reprend l'historique des N derniers jours (rattrapage)
+  age_max_jours: 95               # on ignore les publications datées de plus de N jours
+  liens_max_par_page: 40          # pour les sites sans RSS : nb de liens examinés par page
+  duree_max_minutes: 40           # durée max d'un passage (GitHub coupe à 60 min)
+  transcription_complete_dans_notion: true   # ajoute la transcription intégrale des podcasts dans la page Notion
+
+# ---------------------------------------------------------------------
+# FICHES DE RÉVISION (dossiers « Fiches de révision » et « Pays » dans Notion)
+# ---------------------------------------------------------------------
+fiches:
+  actif: true
+  themes_min_articles: 3          # une fiche thème est créée dès 3 articles sur le thème
+  pays_min_articles: 4            # une fiche pays est créée dès 4 articles sur le pays
+  maj_theme_apres_jours: 2        # une fiche thème est mise à jour au plus tous les 2 jours…
+  maj_pays_apres_jours: 4         # … une fiche pays tous les 4 jours…
+  nouveaux_articles_pour_maj_immediate: 10   # … sauf si 10 nouveaux articles sont arrivés entre-temps
+  fiches_par_passage: 15          # nombre max de fiches traitées à chaque passage
+  articles_par_fiche_max: 50      # nombre max d'articles envoyés à l'IA pour une mise à jour

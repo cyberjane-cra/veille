@@ -1,0 +1,294 @@
+# =====================================================================
+#  SOURCES SURVEILLÉES
+# ---------------------------------------------------------------------
+#  Pour chaque source :
+#    nom      : nom affiché dans Notion
+#    site     : page d'accueil (sert à détecter automatiquement un flux RSS)
+#    flux     : flux RSS/Atom connus (on les essaie en premier)
+#    pages    : pages « liste des publications » lues directement, pour les
+#               sites sans flux RSS fiable. « motif » = expression régulière
+#               que doit respecter l'adresse d'un article (facultatif).
+#               « rendu: true » = page construite en JavaScript (lue via Jina).
+#    podcast  : true si la source est un podcast (transcription audio)
+#    itunes   : recherche du flux podcast sur Apple Podcasts (facultatif)
+#    exclure  : motif d'adresses à ignorer (facultatif)
+#
+#  Pour ajouter une source : copiez un bloc et adaptez-le. Si vous ne
+#  connaissez pas le flux, mettez seulement « site » : le programme le
+#  cherchera tout seul.
+# =====================================================================
+
+- nom: Le Rubicon
+  site: https://lerubicon.org/
+  flux:
+    - https://lerubicon.org/feed/
+
+- nom: Le Rubicon — Le Collimateur (podcast)
+  podcast: true
+  langue_audio: fr
+  flux:
+    - https://feeds.audiomeans.fr/feed/64ee3763-1a46-44c2-8640-3a69405a3ad8.xml
+
+- nom: International Crisis Group
+  site: https://www.crisisgroup.org/
+  # Flux global + CrisisWatch + flux régionaux (les doublons sont éliminés)
+  flux:
+    - https://www.crisisgroup.org/rss
+    - https://www.crisisgroup.org/rss/139
+    - https://www.crisisgroup.org/rss/1
+    - https://www.crisisgroup.org/rss/30
+    - https://www.crisisgroup.org/rss/56
+    - https://www.crisisgroup.org/rss/73
+    - https://www.crisisgroup.org/rss/81
+    - https://www.crisisgroup.org/rss/4697
+
+# ⚠️ Le site du FMI bloque les robots depuis les serveurs cloud (erreur 403) et
+#    ses flux RSS ont été supprimés. Source conservée pour le cas où cela changerait.
+- nom: FMI
+  site: https://www.imf.org/fr/home
+  flux:
+    - https://www.imf.org/en/Publications/RSS?language=eng
+    - https://www.imf.org/en/News/RSS?language=eng
+    - https://www.imf.org/fr/News/RSS?language=fre
+  pages:
+    - url: https://www.imf.org/en/News/SearchNews
+      motif: 'imf\.org/en/News/Articles/20\d\d/'
+      rendu: true
+    - url: https://www.imf.org/en/Publications/Search
+      motif: 'imf\.org/en/Publications/[A-Za-z-]+/Issues/20\d\d/'
+      rendu: true
+
+- nom: Carnegie Endowment
+  site: https://carnegieendowment.org/
+  pages:
+    - url: https://carnegieendowment.org/
+      motif: 'carnegieendowment\.org/(?:[a-z-]+/)*(?:research|emissary|politika)/20\d\d/\d\d/[a-z0-9-]+'
+
+- nom: Egmont Institute
+  site: https://www.egmontinstitute.be/
+  # Le flux RSS du site est vide : on lit son API WordPress (dates + texte intégral)
+  wp_api: https://egmontinstitute.be/wp-json/wp/v2/posts
+
+- nom: FIIA
+  site: https://fiia.fi/en/
+  flux:
+    - https://fiia.fi/en/feed
+    - https://fiia.fi/en/feed?post_type=publication
+
+- nom: SIPRI
+  site: https://www.sipri.org/
+  flux:
+    - https://www.sipri.org/rss/combined.xml
+  pages:
+    - url: https://www.sipri.org/publications/search
+      motif: 'sipri\.org/(?:publications|commentary|media/press-release|research)/20\d\d/'
+      pagination: https://www.sipri.org/publications/search?page={n}
+      debut: 1
+      pages_max: 12
+    - url: https://www.sipri.org/news
+      motif: 'sipri\.org/(?:publications|commentary|media/press-release|news)/20\d\d/'
+
+- nom: Carnegie Council
+  site: https://www.carnegiecouncil.org/
+  flux:
+    - https://feeds.feedburner.com/CarnegieCouncilResourcesRssFeed
+    - https://feeds.feedburner.com/carnegiecouncil/newsFeed
+  pages:
+    - url: https://fr.carnegiecouncil.org/explore-engage/articles-reports
+      motif: 'carnegiecouncil\.org/media/(?:article|report|series)/'
+      pagination: https://fr.carnegiecouncil.org/explore-engage/articles-reports?page={n}
+      debut: 1
+      pages_max: 10
+
+- nom: Carnegie Council (podcasts)
+  podcast: true
+  langue_audio: en
+  flux:
+    - https://rss.libsyn.com/shows/148595/destinations/952415.xml
+
+- nom: CSIS
+  site: https://www.csis.org/
+  pages:
+    - url: https://www.csis.org/analysis
+      motif: 'csis\.org/analysis/[a-z0-9-]+$'
+
+- nom: IISS
+  site: https://www.iiss.org/
+  pages:
+    - url: https://www.iiss.org/online-analysis/
+      motif: 'iiss\.org/(?:online-analysis|research-paper|publications)/[a-z0-9-]+/20\d\d/\d\d/[a-z0-9-]+'
+    - url: https://www.iiss.org/
+      motif: 'iiss\.org/(?:online-analysis|research-paper|publications)/[a-z0-9-]+/20\d\d/\d\d/[a-z0-9-]+'
+
+
+- nom: Direction générale du Trésor
+  site: https://www.tresor.economie.gouv.fr/publications
+  pages:
+    - url: https://www.tresor.economie.gouv.fr/Articles/tags/Tresor-Eco
+      motif: 'tresor\.economie\.gouv\.fr/Articles/20\d\d/\d\d/\d\d/'
+    - url: https://www.tresor.economie.gouv.fr/Articles/tags/Documents-de-Travail
+      motif: 'tresor\.economie\.gouv\.fr/Articles/20\d\d/\d\d/\d\d/'
+
+- nom: Chatham House
+  site: https://www.chathamhouse.org/
+  flux:
+    - https://www.chathamhouse.org/path/whatsnew.xml
+    - https://www.chathamhouse.org/path/83/feed.xml
+    - https://www.chathamhouse.org/path/news-releases.xml
+  pages:
+    - url: https://www.chathamhouse.org/publications
+      motif: 'chathamhouse\.org/20\d\d/\d\d/[a-z0-9-]+'
+  exclure: '/events/'
+
+- nom: France Culture — Les Enjeux internationaux (podcast)
+  podcast: true
+  langue_audio: fr
+  flux:
+    - https://radiofrance-podcast.net/podcast09/rss_13305.xml
+
+- nom: OIT (Organisation internationale du Travail)
+  site: https://www.ilo.org/fr
+  pages:
+    - url: https://www.ilo.org/fr/actualites
+      motif: 'ilo\.org/fr/resource/'
+    - url: https://www.ilo.org/fr/recherche-et-publications
+      motif: 'ilo\.org/fr/publications/'
+    - url: https://www.ilo.org/fr/publications
+      motif: 'ilo\.org/fr/publications/[a-z-]+/[a-z0-9-]+'
+    - url: https://www.ilo.org/fr
+      motif: 'ilo\.org/fr/(?:resource|publications)/[a-z-]+/[a-z0-9-]+' 
+
+# ⚠️ L'Ifri bloque les robots depuis les serveurs cloud (erreur 403) et son flux RSS
+#    n'est plus mis à jour depuis 2023. Source conservée au cas où cela changerait.
+- nom: Ifri
+  site: https://www.ifri.org/fr
+  pages:
+    - url: https://www.ifri.org/fr/publications
+    - url: https://www.ifri.org/fr
+
+- nom: OIF (Francophonie)
+  site: https://www.francophonie.org/
+  flux:
+    - https://www.francophonie.org/rss.xml
+  pages:
+    - url: https://www.francophonie.org/
+
+- nom: IRIS
+  site: https://www.iris-france.org/
+  flux:
+    - https://www.iris-france.org/feed/
+  pages:
+    - url: https://www.iris-france.org/publications/
+  exclure: '/produit/'   # livres de la boutique
+
+- nom: IRIS — Pascal Boniface « Comprendre le monde » (podcast)
+  podcast: true
+  langue_audio: fr
+  flux:
+    - https://feed.ausha.co/qrElvi4GZRAr
+
+- nom: OFCE
+  site: https://www.ofce.fr/
+  # Pas de flux RSS : on lit le blog et les listes de publications (seules celles de 2026 et après)
+  pages:
+    - url: https://www.ofce.fr/blog2024/
+      motif: 'ofce\.fr/blog2024/fr/20\d\d/\d{8}'
+    - url: https://www.ofce.fr/
+      motif: 'ofce\.fr/(?:blog2024/fr/20\d\d/\d{8}|wp/20(?:2[6-9]|[3-9]\d)/\d+|pdf/[a-z]+/(?:20(?:2[6-9]|[3-9]\d)/)?[A-Za-z]*20(?:2[6-9]|[3-9]\d)[^/]*\.pdf|pdf/[a-z]+/20(?:2[6-9]|[3-9]\d)/[^/]+\.pdf)'
+    - url: https://www.ofce.fr/publications/policy.html
+      motif: 'ofce\.fr/pdf/pbrief/20(?:2[6-9]|[3-9]\d)/[^/]+\.pdf'
+    - url: https://www.ofce.fr/publications/working_papers.html
+      motif: 'ofce\.fr/(?:wp/20(?:2[6-9]|[3-9]\d)/\d+|pdf/dtravail/OFCEWP20(?:2[6-9]|[3-9]\d)-\d+\.pdf)'
+    - url: https://www.ofce.fr/publications/rapports.html
+      motif: 'ofce\.fr/pdf/[a-z]+/20(?:2[6-9]|[3-9]\d)/[^/]+\.pdf'
+
+- nom: Brookings
+  site: https://www.brookings.edu/
+  flux:
+    - https://www.brookings.edu/feed/?post_type=article
+  pages:
+    - url: https://www.brookings.edu/
+      motif: 'brookings\.edu/articles/[a-z0-9-]+'
+
+- nom: RUSI
+  site: https://www.rusi.org/
+  flux:
+    - https://www.rusi.org/rss/latest-commentary.xml
+    - https://www.rusi.org/rss/latest-publications.xml
+    - https://www.rusi.org/rss/whats-new.xml
+  pages:
+    - url: https://www.rusi.org/
+      motif: 'rusi\.org/explore-our-research/publications/[a-z0-9-]+/[a-z0-9-]+'
+
+- nom: CFR
+  site: https://www.cfr.org/
+  flux:
+    - https://www.cfr.org/feed/
+
+- nom: SWP Berlin
+  site: https://www.swp-berlin.org/en/
+  flux:
+    - https://www.swp-berlin.org/rss.xml
+
+- nom: FRS (Fondation pour la recherche stratégique)
+  site: https://www.frstrategie.org/
+  ssl_non_verifie: true   # certificat du site incomplet : sans cette option, il est injoignable
+  # Une page par collection ; seules les publications de 2026 et après (l'année termine l'adresse)
+  pages:
+    - url: https://www.frstrategie.org/publications/notes
+      motif: 'frstrategie\.org/(?:en/)?publications/[a-z-]+/[a-z0-9-]+-20(?:2[6-9]|[3-9]\d)$'
+    - url: https://www.frstrategie.org/publications/recherches-et-documents
+      motif: 'frstrategie\.org/(?:en/)?publications/[a-z-]+/[a-z0-9-]+-20(?:2[6-9]|[3-9]\d)$'
+    - url: https://www.frstrategie.org/publications/defense-et-industries
+      motif: 'frstrategie\.org/(?:en/)?publications/[a-z-]+/[a-z0-9-]+-20(?:2[6-9]|[3-9]\d)$'
+    - url: https://www.frstrategie.org/publications/fiches-indo-pacifique
+      motif: 'frstrategie\.org/(?:en/)?publications/[a-z-]+/[a-z0-9-]+-20(?:2[6-9]|[3-9]\d)$'
+    - url: https://www.frstrategie.org/
+      motif: 'frstrategie\.org/(?:en/)?publications/[a-z-]+/[a-z0-9-]+-20(?:2[6-9]|[3-9]\d)$'
+
+- nom: Diploweb
+  site: https://www.diploweb.com/
+  flux:
+    - https://www.diploweb.com/spip.php?page=backend
+
+- nom: GRIP
+  site: https://www.grip.org/
+  flux:
+    - https://www.grip.org/feed/
+
+- nom: CEPA
+  site: https://cepa.org/
+  flux:
+    - https://cepa.org/feed/
+  pages:
+    - url: https://cepa.org/
+      motif: 'cepa\.org/article/[a-z0-9-]+'
+
+- nom: BIG Europe
+  site: https://big-europe.eu/home
+  pages:
+    - url: https://big-europe.eu/publications
+      motif: 'big-europe\.eu/publications/[a-z0-9-]{8,}'
+
+- nom: Sources diplomatiques (podcast du Quai d'Orsay)
+  podcast: true
+  langue_audio: fr
+  flux:
+    - https://feeds.podcastics.com/podcastics/podcasts/rss/4433_76a904e13f50f3d10b6363cf08312a53.rss
+
+- nom: FMES
+  site: https://fmes-france.org/
+  flux:
+    - https://fmes-france.org/feed/
+  pages:
+    - url: https://fmes-france.org/publications/
+
+- nom: Foreign Affairs
+  site: https://www.foreignaffairs.com/
+  flux:
+    - https://www.foreignaffairs.com/rss.xml
+
+- nom: The Conversation (Global)
+  site: https://theconversation.com/global
+  flux:
+    - https://theconversation.com/global/articles.atom
