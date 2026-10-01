@@ -49,7 +49,7 @@ COUNTRY_OVERRIDES = {  # nom simplifié → code ISO3
 
 _ISO_INDEX = None
 STAR = "⭐ "
-RENDER_V = 2  # version de la mise en page des fiches
+RENDER_V = 3  # version de la mise en page des fiches (3 : références aNNN converties en liens)
 
 
 def plain(title):
@@ -369,11 +369,23 @@ class Fiches:
         refs = set(str(r) for r in (item.get("refs") or []))
         return ("⭐ " if refs & getattr(self, "new_ids", set()) else "") + str(item.get("texte", ""))
 
+    INLINE_REFS = re.compile(r"\s*[\[(]\s*(a\d+(?:\s*[,;]\s*a\d+)*)\s*[\])]")
+
     def B(self, kind, text="", extra=None, color=None, bold=False):
-        rich = [{"type": "text", "text": {"content": str(text)[:1900]},
-                 "annotations": {"bold": bold, "color": color or "default"}}] if text else []
+        """Bloc Notion. Les identifiants d'articles écrits dans le texte par l'IA (« [a363, a603] »)
+        sont retirés du texte et remplacés par des liens gris vers les fiches-articles."""
+        text = str(text or "")
+        found = []
+        for m in self.INLINE_REFS.finditer(text):
+            found += re.findall(r"a\d+", m.group(1))
+        text = self.INLINE_REFS.sub("", text).strip()
+        ann = {"bold": bold, "color": color or "default"}
+        rich = [{"type": "text", "text": {"content": text[i:i + 1900]}, "annotations": ann}
+                for i in range(0, min(len(text), 5700), 1900)]
+        if found and not extra:  # (si des liens « refs » sont déjà fournis, on ne les double pas)
+            rich += self.refs_rt(list(dict.fromkeys(found)), getattr(self, "_index", {}))
         rich += extra or []
-        return {"object": "block", "type": kind, kind: {"rich_text": rich}}
+        return {"object": "block", "type": kind, kind: {"rich_text": rich[:90]}}
 
     # ---------- sélection des fiches à (re)construire ----------
     def due(self):
@@ -458,6 +470,7 @@ class Fiches:
             "Règles impératives :",
             "- Utilise UNIQUEMENT les informations de la fiche existante et des articles fournis ; n'invente aucun fait ni chiffre.",
             "- Chaque exemple, chiffre, débat ou événement cite ses sources par leurs identifiants dans \"refs\" (ex. [\"a12\", \"a40\"]).",
+            "- N'écris JAMAIS ces identifiants (a12, a40…) dans les textes eux-mêmes : uniquement dans les champs \"refs\".",
             "- Privilégie les arguments structurants et les données chiffrées précises (unité, date, acteur).",
             "- Mise à jour : conserve ce qui reste pertinent dans la fiche existante, intègre les nouveaux articles, "
             "fusionne les doublons, remplace ce qui est dépassé, retire le secondaire pour respecter les limites.",
@@ -577,6 +590,7 @@ class Fiches:
         if not isinstance(data, dict):
             raise ValueError("fiche illisible")
         index = {a["i"]: a for a in self.st.get("corpus", [])}
+        self._index = index
         if job["kind"] == "theme":
             fam = job["meta"]
             parent = self.child_page(self.root(), fam["famille"], COLOR_EMOJI.get(fam.get("couleur"), "📁"))
@@ -615,6 +629,7 @@ class Fiches:
             s["v"] = RENDER_V
             return
         index = {a["i"]: a for a in corpus}
+        self._index = index
         self.new_ids = set()
         if kind == "theme":
             blocks = self.blocks_theme(job, s["data"], index, len(job["arts"]))
