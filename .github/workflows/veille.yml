@@ -1,0 +1,76 @@
+name: Veille presse
+
+on:
+  schedule:
+    # Toutes les heures (heure UTC). Dépôt public : minutes GitHub illimitées.
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "normal = traiter les nouveautés ; diagnostic = tester les sources et les clés"
+        type: choice
+        default: normal
+        options: [normal, diagnostic]
+
+concurrency:
+  group: veille-presse
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # nécessaire pour garder la planification active (voir dernière étape)
+
+jobs:
+  veille:
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les outils
+        run: pip install -r requirements.txt
+
+      - name: Récupérer la mémoire (articles déjà traités)
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: veille-state-${{ github.run_id }}
+          restore-keys: veille-state-
+
+      - name: Lancer la veille
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+        run: python veille.py --mode "${{ inputs.mode || 'normal' }}"
+
+      - name: Sauvegarder la mémoire
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: veille-state-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Joindre le rapport de diagnostic
+        if: ${{ inputs.mode == 'diagnostic' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-sources
+          path: state/rapport_sources.md
+
+      # GitHub met en pause les tâches planifiées d'un dépôt public sans activité depuis 60 jours.
+      # Cette étape réactive la planification à chaque passage pour éviter cette pause.
+      - name: Garder la planification active
+        if: always() && github.event_name == 'schedule'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/veille.yml/enable"
