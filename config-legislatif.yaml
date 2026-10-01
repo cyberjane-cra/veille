@@ -1,0 +1,31 @@
+# =====================================================================
+#  RÉGLAGES DE LA VEILLE LÉGISLATIVE — vous pouvez modifier ce fichier
+# =====================================================================
+
+# Législature suivie (liste des dossiers législatifs de vie-publique.fr)
+legislature: 17
+debut_legislature: "2024-07-18"   # les panoramas antérieurs sont ignorés
+
+limites:
+  duree_max_minutes: 50              # durée max d'un passage (le workflow coupe à 70 min)
+  reserve_minutes_fiches: 12         # temps gardé en fin de passage pour rédiger les fiches
+  dossiers_par_passage: 400          # dossiers législatifs relus au plus par passage
+  heures_entre_lectures_actif: 6     # texte en cours avec une étape depuis moins de 5 mois
+  heures_entre_lectures_dormant: 72  # texte en cours sans activité récente
+  heures_entre_lectures_promulgue: 24  # loi ou ordonnance publiée (suivi des décrets d'application)
+  pages_panoramas_premier_passage: 30  # rattrapage des panoramas de la législature
+  pages_historique: 12               # rattrapage du fil (consultations, actualités, rapports)
+  jours_historique_fil: 90           # le fil reprend les 90 derniers jours au premier passage
+  elements_fil_par_passage: 60       # publications examinées par l'IA à chaque passage (le reste attend)
+  elements_par_requete_ia: 6         # regroupement des publications par requête (économise le quota)
+  caracteres_par_element: 5000       # texte envoyé à l'IA par publication
+  seuil_rattachement: 6.0            # proximité de vocabulaire minimale pour proposer un texte à l'IA
+
+fiches:
+  fiches_par_passage: 15             # fiches rédigées ou enrichies par l'IA à chaque passage
+  jours_entre_mises_a_jour: 2        # délai minimal entre deux enrichissements (sauf nouvelle étape : immédiat)
+  etoile_jours: 3                    # durée de l'⭐ et de l'alerte sur la ligne du tableau de bord
+  caracteres_par_source: 12000       # texte envoyé à l'IA par source (panorama : un peu plus)
+  elements_lies_max: 12              # publications du fil rattachées, transmises à l'IA
+  sources_officielles_externes: true # avis du Conseil d'État, étude d'impact, rapports parlementaires,
+                                     # décision du Conseil constitutionnel (sites officiels uniquement)
