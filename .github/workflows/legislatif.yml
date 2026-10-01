@@ -1,0 +1,61 @@
+name: Veille législative
+
+on:
+  schedule:
+    - cron: "23 */3 * * *"   # toutes les 3 heures (à hh:23, pour ne pas croiser la veille presse)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "normal ou diagnostic"
+        required: false
+        default: "normal"
+        type: choice
+        options: [normal, diagnostic]
+
+concurrency:
+  group: veille-legislative
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  veille:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installation
+        run: |
+          pip install -r requirements.txt playwright
+          # Navigateur sans écran (sert uniquement si vie-publique.fr demande une vérification)
+          python -m playwright install --with-deps chromium || echo "Chromium non installé : Chrome du serveur utilisé"
+
+      - name: Mémoire (restauration)
+        uses: actions/cache/restore@v4
+        with:
+          path: state/legislatif.json
+          key: legi-state-${{ github.run_id }}
+          restore-keys: legi-state-
+
+      - name: Veille législative
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_LEGI: ${{ secrets.GEMINI_API_KEY_LEGI }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID_LEGI: ${{ secrets.NOTION_PAGE_ID_LEGI }}
+        run: python legislatif.py --mode "${{ github.event.inputs.mode || 'normal' }}"
+
+      - name: Mémoire (sauvegarde)
+        if: always() && (github.event.inputs.mode || 'normal') == 'normal'
+        uses: actions/cache/save@v4
+        with:
+          path: state/legislatif.json
+          key: legi-state-${{ github.run_id }}
