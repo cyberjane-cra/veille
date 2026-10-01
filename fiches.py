@@ -48,6 +48,77 @@ COUNTRY_OVERRIDES = {  # nom simplifié → code ISO3
 }
 
 _ISO_INDEX = None
+STAR = "⭐ "
+RENDER_V = 2  # version de la mise en page des fiches
+
+
+def plain(title):
+    return title[len(STAR):] if title.startswith(STAR) else title
+
+
+STOP = {"dans", "pour", "avec", "sans", "sous", "plus", "moins", "cette", "cette", "leur", "leurs", "elle", "elles",
+        "sont", "être", "etre", "avoir", "mais", "comme", "entre", "depuis", "selon", "dont", "ainsi", "aussi",
+        "tout", "tous", "toute", "toutes", "fait", "faire", "peut", "doit", "deux", "trois", "notamment", "article",
+        "auteur", "auteurs", "analyse", "rapport", "souligne", "explique", "estime", "note", "that", "with", "from",
+        "this", "have", "will", "their", "which", "about", "into", "more", "than", "were", "been", "also",
+        "pays", "monde", "international", "internationale", "politique", "question", "questions", "enjeux"}
+
+
+def _toks(text, simplify):
+    return {w for w in simplify(text).split() if len(w) > 3 and w not in STOP}
+
+
+def related_for(st, a, simplify, k=4, now=None, cache=None):
+    """Articles les plus proches de `a` (thèmes, pays et vocabulaire communs) parmi le corpus."""
+    cache = cache if cache is not None else {}
+    th = set(a.get("th") or [])
+    py = {n for n, _ in a.get("py") or []}
+    tt, tr = _toks(a.get("t", ""), simplify), _toks(a.get("t", "") + " " + a.get("r", "")[:800], simplify)
+    limit = (now - dt.timedelta(days=180)).strftime("%Y-%m-%d") if now else ""
+    scored = []
+    for b in st.get("corpus", []):
+        if not b.get("p") or b["p"] == a.get("p") or b["p"].startswith("dry-") or (b["d"] and b["d"] < limit):
+            continue
+        sth = len(th & set(b.get("th") or []))
+        spy = len(py & {n for n, _ in b.get("py") or []})
+        if not sth and not spy:
+            continue
+        if b["i"] not in cache:
+            cache[b["i"]] = (_toks(b.get("t", ""), simplify),
+                             _toks(b.get("t", "") + " " + b.get("r", "")[:800], simplify))
+        bt, br = cache[b["i"]]
+        jt = len(tt & bt) / len(tt | bt) if tt and bt else 0
+        jr = len(tr & br) / len(tr | br) if tr and br else 0
+        if jr < 0.08 and jt < 0.2:
+            continue
+        score = sth + 1.5 * spy + 8 * jt + 12 * jr
+        if score >= 3.5:
+            scored.append((score, b))
+    scored.sort(key=lambda x: -x[0])
+    return [b for _, b in scored[:k]]
+
+
+def link_backfill(st, notion, simplify, now, time_left, limit=150):
+    """Relie progressivement les articles déjà présents à leurs articles proches (colonne « Articles liés »)."""
+    if "Articles liés" not in getattr(notion, "props", {}):
+        return 0
+    todo = [a for a in st.get("corpus", []) if not a.get("rl") and a.get("p") and not a["p"].startswith("dry-")]
+    cache, n = {}, 0
+    for a in todo[:limit]:
+        if time_left() < 300:
+            break
+        rel = related_for(st, a, simplify, now=now, cache=cache)
+        a["rel"] = [b["p"] for b in rel]
+        a["rl"] = True
+        if a["rel"]:
+            try:
+                notion.set_relation(a["p"], a["rel"])
+            except RuntimeError as e:
+                log.debug("Liens non posés pour %s : %s", a["p"], e)
+        n += 1
+    if n:
+        log.info("Articles liés : %d article(s) reliés à leurs articles proches (reste %d)", n, len(todo) - n)
+    return n
 
 
 def iso3_of(name, simplify):
@@ -170,7 +241,7 @@ class Fiches:
             res = self.notion.req("GET", f"/blocks/{parent}/children?page_size=100"
                                   + (f"&start_cursor={cursor}" if cursor else ""))
             for b in res.get("results", []):
-                if b.get("type") == "child_page" and b["child_page"].get("title") == title:
+                if b.get("type") == "child_page" and plain(b["child_page"].get("title", "")) == plain(title):
                     self.pages[key] = b["id"]
                     return b["id"]
             if not res.get("has_more"):
@@ -188,11 +259,73 @@ class Fiches:
         self.pages[key] = p["id"]
         return p["id"]
 
+    def set_title(self, page_id, title):
+        self.notion.req("PATCH", f"/pages/{page_id}", {"properties": {"title": {"title": [
+            {"type": "text", "text": {"content": title}}]}}})
+
+    def banner(self, index, new_ids, created, n_total):
+        when = f"{self.now:%d/%m/%Y}"
+        if created:
+            text = f"Nouvelle fiche créée le {when} à partir de {n_total} articles."
+            extra = []
+        else:
+            text = f"Mise à jour du {when} : {len(new_ids)} nouvel(s) article(s) intégré(s). Les ⭐ signalent les apports"
+            extra = self.refs_rt(sorted(new_ids, key=lambda i: int(i[1:]), reverse=True)[:8], index)
+        return {"object": "block", "type": "callout", "callout": {
+            "rich_text": [{"type": "text", "text": {"content": text}}] + extra,
+            "icon": {"type": "emoji", "emoji": "⭐"}, "color": "yellow_background"}}
+
+    def top_folder(self, title, icon):
+        """Dossier principal : retrouvé où qu'il soit (vous pouvez le déplacer dans Notion), sinon créé."""
+        key = "top|" + title
+        pid = self.pages.get(key)
+        if pid:
+            try:
+                p = self.notion.req("GET", f"/pages/{pid}")
+                if not p.get("archived") and not p.get("in_trash"):
+                    return pid
+            except RuntimeError:
+                pass
+        res = self.notion.req("POST", "/search", {"query": title, "filter": {"property": "object", "value": "page"},
+                                                  "page_size": 50})
+        for p in res.get("results", []):
+            t = "".join(x.get("plain_text", "") for x in
+                        (p.get("properties", {}).get("title", {}) or {}).get("title", []))
+            if plain(t) == title and not p.get("archived") and not p.get("in_trash") \
+                    and p.get("parent", {}).get("type") != "database_id":
+                self.pages[key] = p["id"]
+                return p["id"]
+        pid = self.child_page(self.notion.clean_id(self.notion.page), title, icon)
+        self.pages[key] = pid
+        return pid
+
     def root(self):
-        return self.child_page(self.notion.clean_id(self.notion.page), "Fiches de révision", "📚")
+        return self.top_folder("Fiches de révision", "📚")
 
     def countries_root(self):
-        return self.child_page(self.notion.clean_id(self.notion.page), "Pays", "🌍")
+        return self.top_folder("Pays", "🌍")
+
+    def all_articles(self, job, index):
+        """Fin de fiche : liens vers tous les articles de la veille rattachés à la fiche."""
+        arts = sorted(job["arts"], key=lambda a: (a["d"], int(a["i"][1:])), reverse=True)
+        cap = self.fc.get("liens_articles_max", 400)
+        out = [self.B("heading_2", f"Tous les articles de la veille ({len(arts)})")]
+        for a in arts[:cap]:
+            d = a["d"]
+            rich = []
+            if a["i"] in getattr(self, "new_ids", set()):
+                rich.append({"type": "text", "text": {"content": "⭐ "}})
+            if len(d) == 10:
+                rich.append({"type": "text", "text": {"content": f"{d[8:10]}/{d[5:7]}/{d[:4]} · "},
+                             "annotations": {"color": "gray"}})
+            rich.append({"type": "text", "text": {"content": (a.get("t") or "(sans titre)")[:300],
+                                                  "link": {"url": "https://www.notion.so/" + a["p"].replace("-", "")}}})
+            rich.append({"type": "text", "text": {"content": f" — {a['s']}"}, "annotations": {"color": "gray"}})
+            out.append({"object": "block", "type": "bulleted_list_item", "bulleted_list_item": {"rich_text": rich}})
+        if len(arts) > cap:
+            out.append(self.B("paragraph", f"… et {len(arts) - cap} articles plus anciens (filtrez le tableau de veille "
+                                           f"sur ce thème ou ce pays pour les voir tous).", color="gray"))
+        return out
 
     def write(self, page_id, key, blocks):
         """Remplace le contenu de la fiche (regroupé dans un bloc unique, supprimé puis recréé)."""
@@ -230,6 +363,11 @@ class Fiches:
                     {"type": "text", "text": {"content": label, "link": {"url": url}},
                      "annotations": {"color": "gray"}}]
         return out[:40]
+
+    def S(self, item):
+        """Préfixe ⭐ si l'élément s'appuie sur un article arrivé lors de cette mise à jour."""
+        refs = set(str(r) for r in (item.get("refs") or []))
+        return ("⭐ " if refs & getattr(self, "new_ids", set()) else "") + str(item.get("texte", ""))
 
     def B(self, kind, text="", extra=None, color=None, bold=False):
         rich = [{"type": "text", "text": {"content": str(text)[:1900]},
@@ -353,21 +491,21 @@ class Fiches:
                 if ar.get("idee"):
                     out.append(B("paragraph", ar["idee"]))
                 for ex in (ar.get("exemples") or [])[:6]:
-                    out.append(B("bulleted_list_item", ex.get("texte", ""), self.refs_rt(ex.get("refs"), index)))
+                    out.append(B("bulleted_list_item", self.S(ex), self.refs_rt(ex.get("refs"), index)))
         if d.get("chiffres"):
             out.append(B("heading_2", "Chiffres clés"))
-            out += [B("bulleted_list_item", c.get("texte", ""), self.refs_rt(c.get("refs"), index))
+            out += [B("bulleted_list_item", self.S(c), self.refs_rt(c.get("refs"), index))
                     for c in d["chiffres"][:15]]
         if d.get("debats"):
             out.append(B("heading_2", "Débats et points de vue"))
-            out += [B("bulleted_list_item", c.get("texte", ""), self.refs_rt(c.get("refs"), index))
+            out += [B("bulleted_list_item", self.S(c), self.refs_rt(c.get("refs"), index))
                     for c in d["debats"][:6]]
         if d.get("chronologie"):
             out.append(B("heading_2", "Chronologie récente"))
             for c in sorted(d["chronologie"], key=lambda x: x.get("date", ""), reverse=True)[:15]:
                 dd = c.get("date", "")
                 lab = f"{dd[8:10]}/{dd[5:7]}/{dd[:4]} — " if len(dd) == 10 else ""
-                out.append(B("bulleted_list_item", lab + c.get("texte", ""), self.refs_rt(c.get("refs"), index)))
+                out.append(B("bulleted_list_item", lab + self.S(c), self.refs_rt(c.get("refs"), index)))
         return out
 
     def blocks_country(self, job, d, index, n_total, wb):
@@ -381,7 +519,7 @@ class Fiches:
             for c in sorted(d["actualites"], key=lambda x: x.get("date", ""), reverse=True)[:10]:
                 dd = c.get("date", "")
                 lab = f"{dd[8:10]}/{dd[5:7]}/{dd[:4]} — " if len(dd) == 10 else ""
-                out.append(B("bulleted_list_item", lab + c.get("texte", ""), self.refs_rt(c.get("refs"), index)))
+                out.append(B("bulleted_list_item", lab + self.S(c), self.refs_rt(c.get("refs"), index)))
         if wb:
             out.append(B("heading_2", "Données de référence (Banque mondiale)"))
             for code, label, kind in WB_INDICATORS:
@@ -392,7 +530,7 @@ class Fiches:
                         {"type": "text", "text": {"content": f" ({year})"}, "annotations": {"color": "gray"}}]))
         if d.get("chiffres"):
             out.append(B("heading_2", "Chiffres tirés de l'actualité"))
-            out += [B("bulleted_list_item", c.get("texte", ""), self.refs_rt(c.get("refs"), index))
+            out += [B("bulleted_list_item", self.S(c), self.refs_rt(c.get("refs"), index))
                     for c in d["chiffres"][:10]]
         if d.get("enjeux"):
             out.append(B("heading_2", "Enjeux"))
@@ -432,6 +570,8 @@ class Fiches:
             use = [a for a in arts if int(a["i"][1:]) > last][:maxa]
         else:
             use = arts[:maxa]
+        created = not s.get("data")
+        self.new_ids = set() if created else {a["i"] for a in use}
         prompt = self.prompt(job, s.get("data"), use)
         data = self.llm.ask_json(prompt)
         if not isinstance(data, dict):
@@ -441,17 +581,69 @@ class Fiches:
             fam = job["meta"]
             parent = self.child_page(self.root(), fam["famille"], COLOR_EMOJI.get(fam.get("couleur"), "📁"))
             page = s.get("page") or self.child_page(parent, job["name"], "📘")
-            blocks = self.blocks_theme(job, data, index, len(job["arts"]))
+            blocks = self.blocks_theme(job, data, index, len(job["arts"])) + self.all_articles(job, index)
         else:
             reg = job["meta"]["region"]
             parent = self.child_page(self.countries_root(), reg,
                                      COLOR_EMOJI.get(self.cfg["region_colors"].get(reg, "gray"), "📁"))
             iso3 = iso3_of(job["name"], self.V.simplify)
             page = s.get("page") or self.child_page(parent, job["name"], flag(iso3) if iso3 else "📄")
-            blocks = self.blocks_country(job, data, index, len(job["arts"]), self.world_bank(iso3))
+            blocks = self.blocks_country(job, data, index, len(job["arts"]), self.world_bank(iso3)) + \
+                self.all_articles(job, index)
+        blocks.insert(0, self.banner(index, self.new_ids, created, len(job["arts"])))
+        self.state.setdefault(job["key"], {})["v"] = RENDER_V
         container = self.write(page, job["key"], blocks)
+        self.set_title(page, STAR + job["name"])
+        self.st.setdefault("folders", {})[parent] = job["meta"].get("famille") or job["meta"].get("region")
         self.state[job["key"]] = {"page": page, "container": container, "data": data, "upd": self.V.iso(self.now),
-                                  "last_seq": max(int(a["i"][1:]) for a in job["arts"])}
+                                  "last_seq": max(int(a["i"][1:]) for a in job["arts"]),
+                                  "star": self.V.iso(self.now), "name": job["name"], "parent": parent,
+                                  "v": RENDER_V}
+
+    def rerender(self, key):
+        """Remet en forme une fiche existante (nouvelle présentation) sans rappeler l'IA."""
+        s = self.state[key]
+        kind, name = key.split(":", 1)
+        corpus = self.st.get("corpus", [])
+        if kind == "theme":
+            fam = next((f for f in self.cfg.get("theme_families", []) if name in f["etiquettes"]), {"famille": ""})
+            job = {"kind": kind, "name": name, "meta": fam, "arts": [a for a in corpus if name in a["th"]]}
+        else:
+            job = {"kind": kind, "name": name, "meta": {}, "arts": [a for a in corpus
+                                                                     if name in [n for n, _ in a.get("py", [])]]}
+        if not job["arts"]:
+            s["v"] = RENDER_V
+            return
+        index = {a["i"]: a for a in corpus}
+        self.new_ids = set()
+        if kind == "theme":
+            blocks = self.blocks_theme(job, s["data"], index, len(job["arts"]))
+        else:
+            blocks = self.blocks_country(job, s["data"], index, len(job["arts"]),
+                                         self.world_bank(iso3_of(name, self.V.simplify)))
+        s["container"] = self.write(s["page"], key, blocks + self.all_articles(job, index))
+        s["v"] = RENDER_V
+
+    def refresh_stars(self):
+        """Retire l'étoile des fiches mises à jour il y a plus de N jours ; étoile les dossiers concernés."""
+        days = self.fc.get("etoile_jours", 3)
+        for key, s in self.state.items():
+            if s.get("star") and (self.V.age_days(s["star"]) or 0) > days:
+                try:
+                    self.set_title(s["page"], s.get("name") or key.split(":", 1)[1])
+                    s.pop("star", None)
+                except RuntimeError as e:
+                    log.debug("Étoile non retirée (%s) : %s", key, e)
+        starred = {s.get("parent") for s in self.state.values() if s.get("star")}
+        shown = self.st.setdefault("folders_star", {})
+        for fid, name in self.st.get("folders", {}).items():
+            want = fid in starred
+            if shown.get(fid) != want:
+                try:
+                    self.set_title(fid, (STAR if want else "") + name)
+                    shown[fid] = want
+                except RuntimeError as e:
+                    log.debug("Dossier %s : %s", name, e)
 
 
 def update(V, st, cfg, notion, llm, time_left):
@@ -462,9 +654,21 @@ def update(V, st, cfg, notion, llm, time_left):
         bootstrap_corpus(st, notion, cfg)
         st["corpus_init"] = True
     prune_corpus(st, V.NOW)
+    link_backfill(st, notion, V.simplify, V.NOW, time_left)
     f = Fiches(V, st, cfg, notion, llm)
+    # Fiches existantes : application de la nouvelle mise en page (liste de tous les articles…)
+    for key in [k for k, s in st.get("fiches", {}).items() if s.get("data") and s.get("page")
+                and s.get("v") != RENDER_V][:25]:
+        if time_left() < 400:
+            break
+        try:
+            f.rerender(key)
+            log.info("  fiche « %s » remise en forme", key.split(":", 1)[1])
+        except Exception as e:  # noqa: BLE001
+            log.warning("Fiche « %s » non remise en forme : %s", key, e)
     jobs = f.due()
     if not jobs:
+        f.refresh_stars()
         return 0
     log.info("Fiches de révision : %d fiche(s) à créer ou mettre à jour", len(jobs))
     done = 0
@@ -482,4 +686,5 @@ def update(V, st, cfg, notion, llm, time_left):
         except Exception as e:  # noqa: BLE001
             log.warning("Fiche « %s » non mise à jour : %s", job["name"], e)
         V.save_state(st)
+    f.refresh_stars()
     return done

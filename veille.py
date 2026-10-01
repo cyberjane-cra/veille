@@ -1073,18 +1073,43 @@ class Notion:
         m = re.search(r"([0-9a-fA-F]{32})$", last)
         return m.group(1).lower() if m else x
 
-    def ensure_db(self):
+    @staticmethod
+    def is_our_db(d):
+        """Reconnaît le tableau de veille à ses colonnes (et non à son nom, que vous pouvez changer)."""
+        props = d.get("properties") or {}
+        return (not d.get("archived") and not d.get("in_trash")
+                and props.get("Lien", {}).get("type") == "url" and "Lecture" in props and "Titre original" in props)
+
+    def ensure_db(self, known_id=None):
         if not self.token:
             raise RuntimeError("NOTION_TOKEN manquant")
         if self.db:
             self.db = self.clean_id(self.db)
             return self.db
-        res = self.req("POST", "/search", {"query": DB_TITLE, "filter": {"property": "object", "value": "database"}})
-        for d in res.get("results", []):
-            title = "".join(t.get("plain_text", "") for t in d.get("title", []))
-            if title.strip() == DB_TITLE and not d.get("archived") and not d.get("in_trash"):
-                self.db = d["id"]
-                return self.db
+        if known_id:  # tableau mémorisé lors des passages précédents
+            try:
+                d = self.req("GET", f"/databases/{known_id}")
+                if self.is_our_db(d):
+                    self.db = d["id"]
+                    return self.db
+            except RuntimeError:
+                pass
+        found, cursor = [], None
+        while True:
+            body = {"filter": {"property": "object", "value": "database"}, "page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            res = self.req("POST", "/search", body)
+            found += [d for d in res.get("results", []) if self.is_our_db(d)]
+            if not res.get("has_more"):
+                break
+            cursor = res.get("next_cursor")
+        if found:
+            page = self.clean_id(self.page) if self.page else ""
+            found.sort(key=lambda d: (d.get("parent", {}).get("page_id", "").replace("-", "") != page,
+                                      d.get("created_time", "")))
+            self.db = found[0]["id"]
+            return self.db
         if not self.page:
             raise RuntimeError("NOTION_PAGE_ID manquant : impossible de créer la base")
         c = self.cfg
@@ -1202,7 +1227,18 @@ class Notion:
                        {"filter": {"property": "Lien", "url": {"equals": url}}, "page_size": 1})
         return bool(res.get("results"))
 
-    def add(self, item, fiche, lecture, transcript=None):
+    def set_relation(self, page_id, ids):
+        self.req("PATCH", f"/pages/{page_id}", {"properties": {"Articles liés": {
+            "relation": [{"id": i} for i in ids[:8]]}}})
+
+    def ensure_relation(self):
+        """Ajoute au tableau la colonne « Articles liés » (lien vers les articles sur le même sujet)."""
+        if "Articles liés" not in self.props:
+            self.req("PATCH", f"/databases/{self.db}", {"properties": {"Articles liés": {
+                "relation": {"database_id": self.db, "single_property": {}}}}})
+            self.load_schema()
+
+    def add(self, item, fiche, lecture, transcript=None, related=None):
         title = fiche.get("titre_fr") or item.get("title") or item["url"]
         props = {
             "Titre": {"title": rt(title[:1900])[:1]},
@@ -1224,6 +1260,8 @@ class Notion:
         props["Pays"] = {"multi_select": [{"name": n} for n, _ in pays]}
         if item.get("date"):
             props["Date"] = {"date": {"start": item["date"][:10]}}
+        if related and "Articles liés" in getattr(self, "props", {}):
+            props["Articles liés"] = {"relation": [{"id": i} for i in related[:8]]}
         children = [
             {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("Synthèse")}},
             {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(fiche.get("resume", ""))}},
@@ -1270,6 +1308,7 @@ def save_state(st):
     cutoff = (NOW - dt.timedelta(days=400)).strftime("%Y%m%d")
     st["seen"] = {k: v for k, v in st["seen"].items() if v >= cutoff}
     st["pending"] = [{k: v for k, v in p.items() if not k.startswith("_")} for p in st["pending"][-3000:]]
+    st = {k: v for k, v in st.items() if not k.startswith("_")}
     tmp = STATE_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False, separators=(",", ":"))
@@ -1370,19 +1409,32 @@ def publish(item, fiche, lecture, notion, st, cfg, dry, transcript=None):
         log.info("  doublon ignoré : %s", fiche.get("titre_fr"))
         mark_seen(st, item["url"])
         return
+    import fiches as fiches_mod
+    probe = {"t": fiche.get("titre_fr") or item.get("title") or "", "r": fiche.get("resume") or "",
+             "th": fiche.get("themes", []), "py": [[n, r] for n, r in fiche.get("pays", [])]}
+    related = fiches_mod.related_for(st, probe, simplify, now=NOW, cache=st.setdefault("_tokcache", {}))
     if dry:
-        print(json.dumps({"source": item["source"], "url": item["url"], "lecture": lecture, **fiche},
-                         ensure_ascii=False, indent=2))
+        print(json.dumps({"source": item["source"], "url": item["url"], "lecture": lecture, **fiche,
+                          "articles_lies": [b["t"] for b in related]}, ensure_ascii=False, indent=2))
         page_id = "dry-" + url_key(item["url"])
     else:
         page = notion.add(item, fiche, lecture,
-                          transcript if cfg["limites"]["transcription_complete_dans_notion"] else None)
+                          transcript if cfg["limites"]["transcription_complete_dans_notion"] else None,
+                          related=[b["p"] for b in related])
         page_id = (page or {}).get("id", "")
     mark_seen(st, item["url"])
     remember_titles(st, item, fiche)
     if page_id:
-        import fiches as fiches_mod
         fiches_mod.add_to_corpus(st, page_id, item, fiche)
+        st["corpus"][-1].update(rel=[b["p"] for b in related], rl=True)
+        # lien réciproque : l'article ancien pointe aussi vers le nouveau
+        for b in related:
+            b["rel"] = ([page_id] + [x for x in b.get("rel", []) if x != page_id])[:8]
+            if not dry:
+                try:
+                    notion.set_relation(b["p"], b["rel"])
+                except RuntimeError as e:
+                    log.debug("Lien réciproque non posé : %s", e)
 
 
 def run(args):
@@ -1395,8 +1447,12 @@ def run(args):
 
     notion = Notion(cfg)
     if not dry:
-        notion.ensure_db()
+        notion.ensure_db(st.get("notion_db"))
         notion.load_schema()
+        try:
+            notion.ensure_relation()
+        except RuntimeError as e:
+            log.warning("Colonne « Articles liés » non créée : %s", e)
         if not st.get("nettoyage_doublons_fait"):
             try:
                 n = notion.remove_duplicates(st)

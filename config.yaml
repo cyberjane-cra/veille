@@ -154,3 +154,5 @@ fiches:
   nouveaux_articles_pour_maj_immediate: 10   # … sauf si 10 nouveaux articles sont arrivés entre-temps
   fiches_par_passage: 15          # nombre max de fiches traitées à chaque passage
   articles_par_fiche_max: 50      # nombre max d'articles envoyés à l'IA pour une mise à jour
+  etoile_jours: 3                 # durée pendant laquelle une fiche enrichie garde son ⭐
+  liens_articles_max: 400         # fin de fiche : liens vers les articles rattachés (les plus récents d'abord)
