@@ -23,9 +23,11 @@ limites:
 
 fiches:
   fiches_par_passage: 15             # fiches rédigées ou enrichies par l'IA à chaque passage
+  pause_entre_fiches_secondes: 20    # respecte la limite de volume par minute des modèles gratuits
   jours_entre_mises_a_jour: 2        # délai minimal entre deux enrichissements (sauf nouvelle étape : immédiat)
   etoile_jours: 3                    # durée de l'⭐ et de l'alerte sur la ligne du tableau de bord
-  caracteres_par_source: 12000       # texte envoyé à l'IA par source (panorama : un peu plus)
-  elements_lies_max: 12              # publications du fil rattachées, transmises à l'IA
+  caracteres_par_source: 8000        # texte envoyé à l'IA par source (panorama : un peu plus)
+  caracteres_max_par_fiche: 55000    # plafond de l'ensemble des sources envoyées pour une fiche
+  elements_lies_max: 8               # publications du fil rattachées, transmises à l'IA
   sources_officielles_externes: true # avis du Conseil d'État, étude d'impact, rapports parlementaires,
                                      # décision du Conseil constitutionnel (sites officiels uniquement)

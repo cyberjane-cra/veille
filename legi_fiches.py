@@ -88,7 +88,7 @@ def collect_materials(L, t, fetch, ext_get, cfg):
     """Rassemble les sources d'une fiche. Renvoie (sources, textes) :
     sources = [{"id": "s1", "label", "url"}], textes = {"s1": "…"}."""
     fc = cfg.get("fiches") or {}
-    lim = int(fc.get("caracteres_par_source", 12000))
+    lim = int(fc.get("caracteres_par_source", 8000))
     sources, texts = [], {}
 
     def add(label, url, text, n=lim):
@@ -102,7 +102,7 @@ def collect_materials(L, t, fetch, ext_get, cfg):
     if t.get("pano_url"):
         ptxt = L.fetch_panorama_text(t)
         add("Vie publique — Panorama des lois : " + (pano.get("title") or t["title"])[:150], t["pano_url"], ptxt,
-            int(lim * 1.6))
+            int(lim * 1.5))
     add("Vie publique — Dossier législatif", t["url"], dossier_summary(t), lim)
     expose = L.fetch_tab(t, "EXPOSE_MOTIFS")
     add("Exposé des motifs", t["url"] + "?detailType=EXPOSE_MOTIFS&detailId=", expose, lim)
@@ -114,20 +114,24 @@ def collect_materials(L, t, fetch, ext_get, cfg):
                 add("Étude d'impact", s["url"], ext_get(s["url"], pdf_pages=30), lim)
         rapports = [i for g in t.get("documents", []) for i in g["items"] if P.norm(i["label"]).startswith("rapport")]
         if rapports:
-            r = rapports[-1]  # rapport le plus récent (CMP, 2e lecture…) puis le premier rapport au fond
+            r = rapports[-1]  # rapport le plus récent (CMP, 2e lecture…, sinon le rapport au fond)
             add("Rapport parlementaire : " + r["label"][:150], r["url"], ext_get(r["url"]), lim)
-            if len(rapports) > 1:
-                r0 = rapports[0]
-                add("Rapport parlementaire : " + r0["label"][:150], r0["url"], ext_get(r0["url"]), lim)
         cc = [x for x in (pano.get("sources") or []) if "conseil-constitutionnel.fr" in x.get("url", "")]
         if cc:
             dec = ext_get(cc[0]["url"])
             if dec:
                 add("Décision du Conseil constitutionnel : " + cc[0]["label"], cc[0]["url"],
-                    dec[:4000] + "\n[…]\n" + dec[-6000:] if len(dec) > 10000 else dec, 10000)
-    for f in L.linked_items(t["id"])[: int(fc.get("elements_lies_max", 12))]:
+                    dec[:3000] + "\n[…]\n" + dec[-5000:] if len(dec) > 8000 else dec, 8000)
+    for f in L.linked_items(t["id"])[: int(fc.get("elements_lies_max", 8))]:
         add(f"{f.get('rub', '')} — {f.get('t', '')[:150]} ({f.get('d', '')})", f.get("u", ""),
             f.get("r", ""), 2500)
+    total_max = int(fc.get("caracteres_max_par_fiche", 55000))
+    total = sum(len(x) for x in texts.values())
+    if total > total_max:  # réduction proportionnelle (début et fin de chaque source conservés)
+        ratio = total_max / total
+        for k, v in texts.items():
+            n = max(1500, int(len(v) * ratio))
+            texts[k] = v if len(v) <= n else v[:int(n * 0.8)] + "\n[…]\n" + v[-int(n * 0.2):]
     return sources, texts
 
 
@@ -152,7 +156,7 @@ def dossier_summary(t):
     e = t.get("eche") or {}
     if e.get("rows"):
         lines.append(f"Échéancier d'application : {e.get('pub', 0)} mesure(s) publiée(s) sur {e.get('total', 0)}")
-        for r in e["rows"][:40]:
+        for r in e["rows"][:25]:
             m = " ; ".join(x["label"] for x in r.get("mesures", [])) or r.get("statut", "")
             lines.append(f"- [{r['etat']}] {r['article']} ({r.get('base', '')}) : {r['objet'][:250]} → {m[:200]}")
     elif t.get("no_decree"):

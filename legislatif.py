@@ -948,8 +948,7 @@ class Legi:
                 a = P.parse_article(html, it["url"])
                 it.update(title=a["title"] or it["title"], date=it.get("date") or a["date"] or TODAY,
                           text=(a["chapo"] + "\n" + a["text"]), themes=a["tags"][:6],
-                          type=it.get("type") or (it["url"].split("vie-publique.fr/")[-1].split("/")[0]
-                                                   .replace("-", " ").capitalize()))
+                          type=P.type_label(it["url"], it.get("type")))
                 if days_since(it["date"]) > lim["jours_historique_fil"] and rub != "comprendre":
                     continue
             it["cands"] = self.candidates(it["title"] + " " + it["text"][:3000])
@@ -1062,6 +1061,22 @@ class Legi:
                 if d in self.st["textes"]:
                     self.st["textes"][d]["fiche_dirty"] = True
         self.st["pending"] = remaining
+
+    def fix_fil_types(self):
+        """Une fois : harmonise la colonne « Type » des éléments du fil déjà publiés."""
+        if self.dry or self.st.get("types_v2"):
+            return
+        n = 0
+        for f in self.st["fil"]:
+            if f.get("rub") in ("Actualités", "Rapports publics", "Comprendre l'élaboration des lois") and f.get("p"):
+                try:
+                    self.notion.update_page(f["p"], {"Type": {"select": {"name": P.type_label(f.get("u", ""))}}})
+                    n += 1
+                except RuntimeError as e:
+                    log.debug("Type non corrigé : %s", e)
+        self.st["types_v2"] = True
+        if n:
+            log.info("Fil : colonne « Type » harmonisée pour %d élément(s)", n)
 
     def linked_items(self, did):
         return sorted([f for f in self.st["fil"] if did in f.get("x", [])], key=lambda f: f.get("d", ""),
@@ -1201,6 +1216,8 @@ class Legi:
             if n_ai >= fc.get("fiches_par_passage", 12):
                 continue
             try:
+                if n_ai:
+                    time.sleep(float(fc.get("pause_entre_fiches_secondes", 20)) if not V.env("LEGI_TEST") else 0)  # limite de débit par minute
                 self.build_fiche(t, lvl)
                 n_ai += 1
                 self.counts["fiches"] += 1
@@ -1324,6 +1341,7 @@ def run(args):
     llm = make_llm(st, cfg)
     L = Legi(cfg, st, fetch, notion, llm, args.dry_run)
     try:
+        L.fix_fil_types()
         L.inventory()
         L.panoramas()
         L.process_panoramas()

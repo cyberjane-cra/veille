@@ -132,6 +132,31 @@ def is_vp_page(html):
     return bool(html) and ("vp_dsfr" in html or "vie-publique.fr" in html[:5000] and "<main" in html)
 
 
+TYPES_PAR_RUBRIQUE = {
+    "en-bref": "En bref", "questions-reponses": "Questions-réponses", "fiches": "Fiche thématique",
+    "eclairage": "Éclairage", "parole-d-expert": "Parole d'expert", "podcast": "Podcast",
+    "infographie": "Infographie", "rapport": "Rapport public", "dossier": "Dossier", "video": "Vidéo",
+    "discours": "Discours", "loi": "Panorama", "consultations": "Consultation", "carte": "Carte",
+    "chronologie": "Chronologie", "dossierlegislatif": "Dossier législatif",
+}
+TYPES_RSS = {norm(v): v for v in TYPES_PAR_RUBRIQUE.values()}
+TYPES_RSS.update({"rapport": "Rapport public", "rapport d'etude": "Rapport public",
+                  "consultation publique": "Consultation", "fiche": "Fiche thématique"})
+
+
+def type_label(url, rss_type=""):
+    """Type de publication harmonisé (« En bref », « Questions-réponses »…), d'après le flux ou l'adresse."""
+    t = TYPES_RSS.get(norm(rss_type or ""))
+    if t:
+        return t
+    seg = re.sub(r"^https?://(?:www\.)?vie-publique\.fr", "", url or "").strip("/").split("/")[0]
+    if seg in TYPES_PAR_RUBRIQUE:
+        return TYPES_PAR_RUBRIQUE[seg]
+    if rss_type:
+        return rss_type.strip()[:1].upper() + rss_type.strip()[1:]
+    return "Article de fond"
+
+
 def is_rss(xml):
     return bool(xml) and "<rss" in xml[:2000] and "<item" in xml
 
