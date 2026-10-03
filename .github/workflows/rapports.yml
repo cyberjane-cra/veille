@@ -1,0 +1,68 @@
+name: Veille rapports publics
+
+on:
+  schedule:
+    - cron: "41 * * * *"   # toutes les heures (à hh:41)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "normal ou diagnostic"
+        required: false
+        default: "normal"
+        type: choice
+        options: [normal, diagnostic]
+
+concurrency:
+  group: veille-rapports
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rapports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installation
+        run: |
+          pip install -r requirements.txt playwright
+          python -m playwright install --with-deps chromium || echo "Chromium non installé : Chrome du serveur utilisé"
+
+      - name: Mémoire de la veille législative (lecture seule, pour relier les rapports aux lois)
+        uses: actions/cache/restore@v4
+        with:
+          path: state/legislatif.json
+          key: legi-state-lecture-${{ github.run_id }}
+          restore-keys: legi-state-
+
+      - name: Mémoire de la veille des rapports (restauration)
+        uses: actions/cache/restore@v4
+        with:
+          path: state/rapports.json
+          key: rapports-state-${{ github.run_id }}
+          restore-keys: rapports-state-
+
+      - name: Veille des rapports publics
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_LEGI: ${{ secrets.GEMINI_API_KEY_LEGI }}
+          GEMINI_API_KEY_RAPPORTS: ${{ secrets.GEMINI_API_KEY_RAPPORTS }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID_RAPPORTS: ${{ secrets.NOTION_PAGE_ID_RAPPORTS }}
+        run: python rapports.py --mode "${{ github.event.inputs.mode || 'normal' }}"
+
+      - name: Mémoire de la veille des rapports (sauvegarde)
+        if: always() && (github.event.inputs.mode || 'normal') == 'normal'
+        uses: actions/cache/save@v4
+        with:
+          path: state/rapports.json
+          key: rapports-state-${{ github.run_id }}
