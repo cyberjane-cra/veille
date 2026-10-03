@@ -1,0 +1,210 @@
+# =====================================================================
+#  ORGANES SUIVIS PAR LA VEILLE DES RAPPORTS PUBLICS
+# ---------------------------------------------------------------------
+#  Même format que sources.yaml (veille presse), avec en plus :
+#    famille       : regroupement affiché dans Notion
+#    titre_motif   : (facultatif) le titre doit contenir ce motif pour être retenu
+#    titre_exclure : (facultatif) titres à écarter (ex. rapports sur un projet de loi,
+#                    déjà suivis par la veille législative)
+#  Les sources sans flux RSS sont lues sur leur page de publications (« pages ») ;
+#  elles n'ont pas de ligne « site » pour éviter la détection automatique de flux
+#  d'actualités généralistes.
+#  Au premier passage, les publications non datées de ces pages servent de point
+#  de départ : seules les NOUVELLES publications sont ensuite traitées.
+#  Vie-publique.fr (rubrique « Rapports publics ») sert de filet de sécurité :
+#  elle recense des rapports de très nombreux organes ; les doublons sont écartés.
+# =====================================================================
+
+# ---------------- Juridictions financières ----------------
+- nom: Cour des comptes
+  famille: Juridictions financières
+  site: https://www.ccomptes.fr/fr
+  flux:
+    - https://www.ccomptes.fr/rss/juridiction/98
+
+- nom: Conseil des prélèvements obligatoires (CPO)
+  famille: Juridictions financières
+  site: https://www.ccomptes.fr/fr
+  flux:
+    - https://www.ccomptes.fr/rss/juridiction/201
+  pages:
+    - url: https://www.ccomptes.fr/fr/institutions-associees/conseil-des-prelevements-obligatoires-cpo
+      motif: 'ccomptes\.fr/fr/publications/[a-z0-9-]+'
+
+- nom: Haut Conseil des finances publiques (HCFP)
+  famille: Juridictions financières
+  pages:
+    - url: https://www.hcfp.fr/liste-avis
+      motif: 'hcfp\.fr/(?:liste-avis/[a-z0-9-]+|sites/default/files/.+\.pdf)'
+
+# ---------------- Parlement ----------------
+- nom: Sénat
+  famille: Parlement
+  site: https://www.senat.fr/
+  flux:
+    - https://www.senat.fr/rss/rapports.rss
+  # Rapports d'information, commissions d'enquête, délégations, OPECST ;
+  # les rapports sur un texte (projet/proposition de loi) sont écartés.
+  titre_exclure: '(?i)(sur le projet de loi|sur la proposition de loi|sur le projet de loi de finances|avis présenté|fait au nom de la commission mixte paritaire|texte de la commission|sur la proposition de résolution)'
+
+- nom: Assemblée nationale
+  famille: Parlement
+  site: https://www.assemblee-nationale.fr/
+  flux:
+    - https://www2.assemblee-nationale.fr/feeds/detail/documents-parlementaires
+  pages:
+    - url: https://www.assemblee-nationale.fr/dyn/actualites-accueil-hub/les-rapports-d-information-publies-pendant-la-session-2026-2027
+      motif: 'assemblee-nationale\.fr/dyn/(?:old/)?17/rap-(?:info|enq)/'
+    - url: https://www.assemblee-nationale.fr/dyn/actualites-accueil-hub/les-rapports-d-information-publies-pendant-la-session-2025-2026
+      motif: 'assemblee-nationale\.fr/dyn/(?:old/)?17/rap-(?:info|enq)/'
+  titre_motif: '(?i)(rapport d.information|commission d.enquête|mission d.information|rap-info|rap-enq|évaluation|contrôle)'
+  titre_exclure: '(?i)(sur le projet de loi|sur la proposition de loi|avis présenté|proposition de résolution)'
+
+# ---------------- Stratégie, finances sociales, climat ----------------
+- nom: Haut-commissariat à la Stratégie et au Plan
+  famille: Hauts conseils et organes d'expertise
+  site: https://www.strategie-plan.gouv.fr/
+  flux:
+    - https://www.strategie-plan.gouv.fr/rss.xml
+  pages:
+    - url: https://www.strategie-plan.gouv.fr/publications
+      motif: 'strategie-plan\.gouv\.fr/publications/[a-z0-9-]+'
+
+- nom: Haut Conseil du financement de la protection sociale (HCFiPS)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.securite-sociale.fr/hcfips
+      motif: 'securite-sociale\.fr/home/hcfips/zone-main-content/rapports-et-avis-du-hcfips/[a-z0-9.-]+\.html'
+
+- nom: Haut Conseil pour l'avenir de l'assurance maladie (HCAAM)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.securite-sociale.fr/hcaam
+      motif: 'securite-sociale\.fr/home/hcaam/zone-main-content/rapports-et-avis-1/[a-z0-9.-]+\.html'
+
+- nom: Haut Conseil de la famille, de l'enfance et de l'âge (HCFEA)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://hcfea.gouv.fr/
+      motif: 'hcfea\.gouv\.fr/(?!sites/|user|search|contact)[a-z0-9-]{12,}$'
+
+- nom: Haut Conseil pour le climat
+  famille: Hauts conseils et organes d'expertise
+  site: https://www.hautconseilclimat.fr/
+  flux:
+    - https://www.hautconseilclimat.fr/feed/
+  pages:
+    - url: https://www.hautconseilclimat.fr/publications/
+      motif: 'hautconseilclimat\.fr/publications/[a-z0-9-]+/?$'
+
+- nom: Conseil d'orientation des retraites (COR)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.cor-retraites.fr/documents/rapports-du-cor
+      motif: 'cor-retraites\.fr/rapports-du-cor/[a-z0-9-]+'
+
+- nom: Conseil d'analyse économique (CAE)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://cae-eco.fr/
+      motif: 'cae-eco\.fr/[a-z0-9-]{15,}$'
+
+- nom: Conseil économique, social et environnemental (CESE)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.lecese.fr/travaux-du-cese/travaux-publies
+      motif: 'lecese\.fr/travaux-publies/[a-z0-9-]+'
+
+- nom: Conseil national des politiques de lutte contre la pauvreté (CNLE)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://cnle.gouv.fr/les-rapports.html
+      motif: 'cnle\.gouv\.fr/[a-z0-9-]{10,}\.html'
+
+- nom: Haut Conseil à l'égalité (HCE)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.haut-conseil-egalite.gouv.fr/
+      motif: 'haut-conseil-egalite\.gouv\.fr/(?:rapport|avis|etude)[a-z0-9-]+'
+
+- nom: Conseil de l'IA et du numérique (CNNum)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.conseil-ia-numerique.fr/
+      motif: 'conseil-ia-numerique\.fr/(?:travaux|publications|avis|rapports?)/[a-z0-9-]+'
+
+- nom: Conseil d'État (études)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.conseil-etat.fr/publications-colloques/etudes
+      motif: 'conseil-etat\.fr/publications-colloques/etudes/[a-z0-9-]+/[a-z0-9-]+'
+
+- nom: Haut Conseil de la santé publique (HCSP)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.hcsp.fr/explore.cgi/avisrapports
+      motif: 'hcsp\.fr/explore\.cgi/avisrapportsdomaine\?clefr=\d+'
+
+# ---------------- Inspections générales ----------------
+- nom: Inspection générale des finances (IGF)
+  famille: Inspections générales
+  pages:
+    - url: https://www.igf.finances.gouv.fr/sites/igf/accueil/rapports-publics/nos-dernieres-publications.html
+      motif: 'igf\.finances\.gouv\.fr/.+(?:rapport|publications?)/.+'
+
+- nom: Inspection générale des affaires sociales (IGAS)
+  famille: Inspections générales
+  pages:
+    - url: https://igas.gouv.fr/nos-rapports
+      motif: 'igas\.gouv\.fr/(?!nos-rapports$)[a-z0-9-]{15,}$'
+
+- nom: Inspection générale de l'environnement et du développement durable (IGEDD)
+  famille: Inspections générales
+  pages:
+    - url: https://igedd.documentation.developpement-durable.gouv.fr/recherche
+      motif: 'igedd\.documentation\.developpement-durable\.gouv\.fr/(?:notice|document)'
+
+- nom: Inspection générale de l'administration (IGA)
+  famille: Inspections générales
+  pages:
+    - url: https://www.interieur.gouv.fr/Publications/Rapports-de-l-IGA
+      motif: 'interieur\.gouv\.fr/Publications/Rapports-de-l-IGA/.+'
+
+- nom: Inspection générale de l'éducation, du sport et de la recherche (IGÉSR)
+  famille: Inspections générales
+  pages:
+    - url: https://www.education.gouv.fr/rapports-de-l-inspection-generale-de-l-education-du-sport-et-de-la-recherche-igesr-307394
+      motif: 'education\.gouv\.fr/[a-z0-9-]+-\d{5,}$'
+
+# ---------------- Autorités indépendantes ----------------
+- nom: Autorité de la concurrence
+  famille: Autorités indépendantes
+  pages:
+    - url: https://www.autoritedelaconcurrence.fr/fr/liste-des-decisions-et-avis
+      motif: 'autoritedelaconcurrence\.fr/fr/avis/[a-z0-9-]+'
+    - url: https://www.autoritedelaconcurrence.fr/fr/publications/76
+      motif: 'autoritedelaconcurrence\.fr/fr/publications/[a-z0-9-]{12,}'
+
+- nom: CNIL
+  famille: Autorités indépendantes
+  site: https://www.cnil.fr/
+  flux:
+    - https://www.cnil.fr/fr/rss.xml
+
+- nom: Défenseur des droits
+  famille: Autorités indépendantes
+  pages:
+    - url: https://www.defenseurdesdroits.fr/etudes-et-rapports-126
+      motif: 'defenseurdesdroits\.fr/[a-z0-9-]+-\d+$'
+
+- nom: Commission nationale consultative des droits de l'homme (CNCDH)
+  famille: Autorités indépendantes
+  pages:
+    - url: https://www.cncdh.fr/publications
+      motif: 'cncdh\.fr/publications/[a-z0-9-]+'
+
+- nom: Commission de régulation de l'énergie (CRE)
+  famille: Autorités indépendantes
+  pages:
+    - url: https://www.cre.fr/documents/rapports-et-etudes.html
+      motif: 'cre\.fr/documents/rapports-et-etudes/[a-z0-9-]+\.html'

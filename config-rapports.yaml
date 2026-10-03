@@ -1,0 +1,45 @@
+# =====================================================================
+#  RÉGLAGES DE LA VEILLE DES RAPPORTS PUBLICS
+#  (la liste des organes suivis est dans sources-rapports.yaml)
+# =====================================================================
+
+limites:
+  duree_max_minutes: 45            # durée max d'un passage
+  jours_premier_passage: 21        # au premier passage : rapports des 3 dernières semaines
+  liens_max_par_page: 40           # sites sans flux RSS : liens examinés par page
+  tri_par_passage: 80              # publications triées par l'IA (vrai rapport ? portée nationale ?)
+
+# Rapports ne concernant qu'une collectivité ou un établissement local (ex. contrôle d'une commune)
+garder_rapports_locaux: false
+
+fiches:
+  fiches_par_passage: 6            # fiches très détaillées rédigées à chaque passage (passage toutes les heures)
+  pause_entre_fiches_secondes: 30  # respecte la limite de volume par minute des modèles gratuits
+  etoile_jours: 3                  # durée de l'⭐ « nouveau rapport »
+  pages_pdf_max: 400               # pages lues dans le PDF du rapport
+  caracteres_envoyes_max: 90000    # texte du rapport envoyé à l'IA (début, recommandations, milieu, fin)
+
+liens_lois:
+  mois_lois_promulguees: 24        # rattachement possible aux lois promulguées depuis moins de 24 mois
+
+# Thèmes (colonne « Thèmes ») : l'IA en choisit 1 à 5
+themes:
+  - {nom: "Finances publiques et dette", couleur: red}
+  - {nom: "Prélèvements obligatoires et fiscalité", couleur: red}
+  - {nom: "Protection sociale et retraites", couleur: blue}
+  - {nom: "Santé et assurance maladie", couleur: blue}
+  - {nom: "Famille et enfance", couleur: pink}
+  - {nom: "Handicap et autonomie", couleur: pink}
+  - {nom: "Pauvreté et exclusion", couleur: pink}
+  - {nom: "Logement et urbanisme", couleur: brown}
+  - {nom: "Travail et emploi", couleur: yellow}
+  - {nom: "Compétitivité et entreprises", couleur: yellow}
+  - {nom: "Commerce et concurrence", couleur: yellow}
+  - {nom: "Climat et énergie", couleur: green}
+  - {nom: "Environnement et agriculture", couleur: green}
+  - {nom: "Numérique et IA", couleur: purple}
+  - {nom: "Éducation, recherche et culture", couleur: purple}
+  - {nom: "Justice et sécurité", couleur: gray}
+  - {nom: "Institutions et administration", couleur: gray}
+  - {nom: "Collectivités territoriales", couleur: orange}
+  - {nom: "Défense et international", couleur: orange}
