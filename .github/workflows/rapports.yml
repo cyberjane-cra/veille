@@ -50,6 +50,13 @@ jobs:
           key: rapports-state-${{ github.run_id }}
           restore-keys: rapports-state-
 
+      - name: Données détaillées des fiches (pour les super fiches) (restauration)
+        uses: actions/cache/restore@v4
+        with:
+          path: state/fiches
+          key: rapports-fiches-${{ github.run_id }}
+          restore-keys: rapports-fiches-
+
       - name: Veille des rapports publics
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -66,3 +73,10 @@ jobs:
         with:
           path: state/rapports.json
           key: rapports-state-${{ github.run_id }}
+
+      - name: Données détaillées des fiches (sauvegarde)
+        if: always() && (github.event.inputs.mode || 'normal') == 'normal'
+        uses: actions/cache/save@v4
+        with:
+          path: state/fiches
+          key: rapports-fiches-${{ github.run_id }}
