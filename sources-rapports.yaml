@@ -16,6 +16,10 @@
 # =====================================================================
 
 # ---------------- Juridictions financières ----------------
+# ⚠️ ccomptes.fr, hcfp.fr et securite-sociale.fr (HCFiPS, HCAAM) ne répondent pas aux serveurs
+#    de GitHub (diagnostics des 4/10/2026). Leurs rapports arrivent par vie-publique.fr
+#    (rubrique « Rapports publics »), qui reprend ceux de la Cour le jour même. Sources
+#    conservées pour le cas où l'accès s'ouvrirait. Le CNLE (même problème) est retiré.
 - nom: Cour des comptes
   famille: Juridictions financières
   site: https://www.ccomptes.fr/fr
@@ -73,6 +77,21 @@
     - url: https://www.strategie-plan.gouv.fr/publications
       motif: 'strategie-plan\.gouv\.fr/publications/[a-z0-9-]+'
 
+- nom: Direction générale du Trésor (Trésor-Éco et études)
+  famille: Hauts conseils et organes d'expertise
+  pages:
+    - url: https://www.tresor.economie.gouv.fr/Articles/tags/Tresor-Eco
+      motif: 'tresor\.economie\.gouv\.fr/Articles/20\d\d/\d\d/\d\d/'
+    - url: https://www.tresor.economie.gouv.fr/Articles/tags/Documents-de-Travail
+      motif: 'tresor\.economie\.gouv\.fr/Articles/20\d\d/\d\d/\d\d/'
+
+- nom: CEPII (Centre d'études prospectives et d'informations internationales)
+  famille: Hauts conseils et organes d'expertise
+  site: https://www.cepii.fr/
+  flux:
+    - https://www.cepii.fr/CEPII/rss/RSSAll.asp
+    - https://www.cepii.fr/CEPII/rss/RSSLettre.asp
+
 - nom: Haut Conseil du financement de la protection sociale (HCFiPS)
   famille: Hauts conseils et organes d'expertise
   ssl_non_verifie: true
@@ -120,12 +139,6 @@
     - url: https://www.lecese.fr/travaux-du-cese/travaux-publies
       motif: 'lecese\.fr/travaux-publies/[a-z0-9-]+'
 
-- nom: Conseil national des politiques de lutte contre la pauvreté (CNLE)
-  famille: Hauts conseils et organes d'expertise
-  pages:
-    - url: https://www.cnle.gouv.fr/les-rapports.html
-      motif: 'cnle\.gouv\.fr/[a-z0-9-]{10,}\.html'
-
 - nom: Haut Conseil à l'égalité (HCE)
   famille: Hauts conseils et organes d'expertise
   pages:
@@ -137,10 +150,12 @@
   pages:
     - url: https://www.conseil-ia-numerique.fr/
 
-- nom: Conseil d'État (études)
+- nom: Conseil d'État (études et avis)
   famille: Hauts conseils et organes d'expertise
-  pages:
-    - url: https://www.conseil-etat.fr/publications-colloques/etudes
+  site: https://www.conseil-etat.fr/
+  flux:
+    - https://www.conseil-etat.fr/rss/etudes-rss
+    - https://www.conseil-etat.fr/rss/avis-rss
 
 - nom: Haut Conseil de la santé publique (HCSP)
   famille: Hauts conseils et organes d'expertise

@@ -234,27 +234,28 @@ def read_report(url, fetch_vp=None, max_pages=400):
     return out
 
 
-def compose_for_ai(doc, recs, budget):
-    """Texte envoyé à l'IA : début (synthèse, introduction), recommandations, milieu échantillonné, fin."""
-    full = doc["pdf_text"] if len(doc["pdf_text"]) > len(doc["html_text"]) else doc["html_text"]
-    parts = []
-    if doc.get("synth_text"):
-        parts.append("=== SYNTHÈSE PUBLIÉE ===\n" + doc["synth_text"][: budget // 4])
-    rec_txt = "\n".join(f"{r['kind']} n° {r['num']}{' (' + r['dest'] + ')' if r['dest'] else ''} : {r['texte']}"
-                        for r in recs)
-    if rec_txt:
-        parts.append("=== RECOMMANDATIONS RELEVÉES MOT POUR MOT DANS LE RAPPORT ===\n" + rec_txt[: budget // 3])
-    rest = budget - sum(len(p) for p in parts)
-    if len(full) <= rest:
-        parts.append("=== TEXTE DU RAPPORT ===\n" + full)
-    else:
-        head, tail = int(rest * 0.55), int(rest * 0.15)
-        mid = rest - head - tail
-        m0 = len(full) // 2 - mid // 2
-        parts.append("=== TEXTE DU RAPPORT (début) ===\n" + full[:head])
-        parts.append("=== EXTRAIT (milieu du rapport) ===\n" + full[m0:m0 + mid])
-        parts.append("=== TEXTE DU RAPPORT (fin) ===\n" + full[-tail:])
-    return "\n\n".join(parts), len(full)
+def split_parts(text, size):
+    """Découpe le texte en parties d'environ `size` caractères, sur des fins de paragraphe."""
+    parts, i = [], 0
+    while i < len(text):
+        j = min(len(text), i + size)
+        if j < len(text):
+            k = text.rfind("\n\n", i + int(size * 0.7), j)
+            if k == -1:
+                k = text.rfind("\n", i + int(size * 0.7), j)
+            if k > i:
+                j = k
+        parts.append(text[i:j])
+        i = j
+    return parts
+
+
+def recs_text(recs):
+    return "\n".join(f"{r['kind']} n° {r['num']}{' (' + r['dest'] + ')' if r['dest'] else ''} : {r['texte']}"
+                     for r in recs)
+
+
+
 
 
 # =====================================================================
@@ -683,7 +684,7 @@ class Rapports:
             if "tri" not in it or (not self.dry and not it.get("page")):
                 continue
             if done:
-                time.sleep(float(self.cfg["fiches"].get("pause_entre_fiches_secondes", 20)))
+                time.sleep(0 if V.env("LEGI_TEST") else float(self.cfg["fiches"].get("pause_entre_fiches_secondes", 20)))
             try:
                 self.build(it)
                 done += 1
@@ -713,7 +714,24 @@ class Rapports:
         recs = extract_recommendations(doc["pdf_text"] or doc["html_text"])
         if not recs and doc.get("synth_text"):
             recs = extract_recommendations(doc["synth_text"])
-        body, n_chars = compose_for_ai(doc, recs, int(fc.get("caracteres_envoyes_max", 90000)))
+        full = doc["pdf_text"] if len(doc["pdf_text"]) > len(doc["html_text"]) else doc["html_text"]
+        n_chars = len(full)
+        if n_chars <= int(fc.get("lecture_integrale_max_caracteres", 250000)):
+            # rapport lu en entier en une seule fois
+            body = "\n\n".join(x for x in (
+                ("=== SYNTHÈSE PUBLIÉE ===\n" + doc["synth_text"][:60000]) if doc.get("synth_text") else "",
+                ("=== RECOMMANDATIONS RELEVÉES MOT POUR MOT DANS LE RAPPORT ===\n" + recs_text(recs)) if recs else "",
+                "=== TEXTE INTÉGRAL DU RAPPORT ===\n" + full) if x)
+            mode = "lu intégralement"
+        else:
+            # rapport très long : lecture partie par partie, puis synthèse de l'ensemble
+            notes, n_parts = self.read_in_parts(it, full)
+            body = "\n\n".join(x for x in (
+                ("=== SYNTHÈSE PUBLIÉE ===\n" + doc["synth_text"][:40000]) if doc.get("synth_text") else "",
+                ("=== RECOMMANDATIONS RELEVÉES MOT POUR MOT DANS LE RAPPORT ===\n" + recs_text(recs)) if recs else "",
+                "=== DÉBUT DU RAPPORT (synthèse, introduction) ===\n" + full[:40000],
+                "=== NOTES DE LECTURE DE CHAQUE PARTIE DU RAPPORT (le rapport a été lu en entier) ===\n" + notes) if x)
+            mode = f"lu intégralement en {n_parts} parties"
         cands = self.legi.candidates(it["title"] + " " + body[:20000]) if self.legi.ok else []
         prompt = self.prompt(it, body, recs, cands, n_chars)
         data = L.ask(self.llm, prompt, "flash", 16384)
@@ -725,7 +743,8 @@ class Rapports:
             if isinstance(x, dict) and x.get("code") in codes:
                 liens.append(dict(x, did=codes[x["code"]]))
         it["liens"] = [x["did"] for x in liens]
-        lecture = ("PDF intégral" if doc["pdf_text"] else "page web") + f", {n_chars:,} caractères".replace(",", " ")
+        pages = max(1, round(n_chars / 2800))
+        lecture = ("PDF" if doc["pdf_text"] else "page web") + f" d'environ {pages} pages, {mode}"
         if self.dry:
             print(json.dumps({"titre": it["title"], "recs_verbatim": len(recs), "liens": liens,
                               "data": data}, ensure_ascii=False, indent=1)[:6000])
@@ -804,7 +823,9 @@ class Rapports:
             "",
             f"=== RAPPORT : {it['title']} ===",
             f"Organe : {it['organe']} — Date : {it.get('date') or 'inconnue'} — Adresse : {it['url']}",
-            f"Longueur du document lu : {n_chars} caractères (extraits ci-dessous si le document est long).",
+            f"Longueur du document : {n_chars} caractères. Le rapport a été lu en entier : tu disposes soit de son "
+            "texte intégral, soit, pour les rapports très longs, des notes de lecture exhaustives de chacune de ses "
+            "parties. Couvre TOUTES les parties.",
             "",
         ]
         if cands:
@@ -816,6 +837,34 @@ class Rapports:
             lines.append("(Aucun texte législatif suivi ne paraît proche : laisse \"liens_lois\" vide.)\n")
         lines.append(body)
         return "\n".join(lines)
+
+    def read_in_parts(self, it, full):
+        """Lecture exhaustive d'un très long rapport : notes détaillées partie par partie (IA « lite »)."""
+        fc = self.cfg["fiches"]
+        parts = split_parts(full, int(fc.get("taille_partie_caracteres", 100000)))
+        maxp = int(fc.get("parties_max", 12))
+        if len(parts) > maxp:  # au-delà, les dernières parties (annexes) sont regroupées
+            parts = parts[:maxp - 1] + ["\n".join(parts[maxp - 1:])[: int(fc.get("taille_partie_caracteres", 100000))]]
+        out = []
+        for n, part in enumerate(parts, 1):
+            prompt = "\n".join([
+                f"Tu lis la partie {n}/{len(parts)} du rapport « {it['title']} » ({it['organe']}). Prends des notes "
+                "de lecture EXHAUSTIVES et fidèles de CETTE partie, pour qu'un haut fonctionnaire n'ait pas à la lire.",
+                F.NEUTRALITE,
+                "Réponds UNIQUEMENT en JSON : {\"titres\": [\"titres des chapitres ou sections de la partie\"], "
+                "\"resume\": \"5 à 10 phrases\", \"constats\": [{\"titre\": \"\", \"developpement\": \"2 à 5 phrases, "
+                "argumentaire et exemples\"}], \"chiffres\": [\"donnée chiffrée avec unité, date, périmètre\"], "
+                "\"recommandations\": [\"recommandations ou propositions de la partie, MOT POUR MOT\"], "
+                "\"positions\": [\"positions ou réponses d'acteurs, attribuées\"]}",
+                "", "=== TEXTE DE LA PARTIE ===", part])
+            try:
+                d = L.ask(self.llm, prompt, "lite", 8192)
+                out.append(f"--- Partie {n}/{len(parts)} ---\n" + json.dumps(d, ensure_ascii=False))
+            except (ValueError, KeyError) as e:
+                out.append(f"--- Partie {n}/{len(parts)} : notes indisponibles ({e}) ---")
+            time.sleep(0 if V.env("LEGI_TEST") else float(fc.get("pause_entre_parties_secondes", 8)))
+        log.info("  rapport long : %d parties lues", len(parts))
+        return "\n".join(out), len(parts)
 
     # ---------------- rendu de la fiche ----------------
     def render(self, it, d, recs, liens, doc, lecture):
