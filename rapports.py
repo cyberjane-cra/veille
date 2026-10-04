@@ -13,7 +13,11 @@ Pour chaque nouveau rapport :
   3. relevé MOT POUR MOT des recommandations, directement dans le texte du rapport ;
   4. fiche très détaillée rédigée par l'IA (contexte, chiffres clés, constats et
      argumentaire, recommandations, enjeux) ;
-  5. rattachement aux textes de loi en cours ou récents suivis par la veille législative.
+  5. rattachement aux textes de loi en cours ou récents suivis par la veille législative ;
+  6. classement dans les dossiers thématiques et, lorsque plusieurs rapports portent sur le même
+     sujet ou se complètent, « super fiche » 🔷 de synthèse (enjeux, textes de loi en cours, éléments
+     de langage, tableau de toutes les recommandations mot pour mot avec avantages et limites).
+Les fiches reprennent la langue des rapports (formulations, notions, éléments de langage).
 
 Usage :
   python rapports.py                      # passage normal
@@ -146,9 +150,12 @@ def extract_recommendations(text, max_items=150):
         m = re.match(r"(\d+)\s*([a-z]?)", r["num"])
         return (int(m.group(1)), m.group(2)) if m else (9999, "")
     recs.sort(key=key)
-    # une seule recommandation « 1 » isolée est souvent un faux positif
-    if len(recs) == 1 and len(recs[0]["texte"]) < 60:
+    # garde-fous contre les faux positifs : une série de recommandations commence à 1 (ou presque)
+    # et compte plusieurs éléments (sinon : renvoi à une recommandation d'un autre organisme, etc.)
+    nums = [int(re.match(r"\d+", r["num"]).group(0)) for r in recs]
+    if min(nums) > 3 or (len(recs) == 1 and nums[0] != 1):
         return []
+    recs = [r for r, n in zip(recs, nums) if n <= 300]
     return recs[:max_items]
 
 
@@ -261,12 +268,162 @@ def recs_text(recs):
 # =====================================================================
 # Thèmes
 # =====================================================================
+def theme_families(cfg):
+    """[{"famille", "icone", "couleur", "themes": [...]}] (ancien format « themes » à plat accepté)."""
+    if cfg.get("familles_thematiques"):
+        return cfg["familles_thematiques"]
+    return [{"famille": "Thèmes", "icone": "📁", "couleur": "default",
+             "themes": [t["nom"] if isinstance(t, dict) else t for t in cfg.get("themes", [])]}]
+
+
 def theme_list(cfg):
-    return [t["nom"] if isinstance(t, dict) else t for t in cfg.get("themes", [])]
+    return [t for f in theme_families(cfg) for t in f["themes"]]
 
 
 def theme_colors(cfg):
-    return {t["nom"]: t.get("couleur", "default") for t in cfg.get("themes", []) if isinstance(t, dict)}
+    return {t: f.get("couleur", "default") for f in theme_families(cfg) for t in f["themes"]}
+
+
+def family_of(cfg, theme):
+    return next((f for f in theme_families(cfg) if theme in f["themes"]), None)
+
+
+# =====================================================================
+# Restitution fidèle : règles de rédaction et contrôle mot pour mot
+# =====================================================================
+STYLE = (
+    "Exigences de rédaction (impératives) :\n"
+    "- RESTITUTION FIDÈLE DU FOND ET DE LA FORME : tu écris avec la langue du rapport. Reprends ses mots, ses "
+    "tournures, ses notions, ses intitulés, ses sigles et ses éléments de langage tels qu'il les emploie ; "
+    "privilégie la reprise littérale de ses phrases et de ses formules (entre guillemets « » lorsqu'il s'agit de "
+    "citations). N'emploie ni synonyme ni paraphrase lorsque le rapport dispose d'une formulation ; ne simplifie "
+    "pas et ne « vulgarise » pas le vocabulaire technique ; conserve la terminologie administrative, juridique et "
+    "budgétaire exacte (intitulés des dispositifs, des programmes, des instances).\n"
+    "- Aucune appréciation de ta part : les appréciations sont celles du rapport, reprises dans ses termes et "
+    "attribuées à son auteur (« la Cour relève que… », « la mission estime que… », « selon les rapporteurs… »). "
+    "Les positions des administrations et organismes contrôlés sont attribuées de même.\n"
+    "- Aucun vocabulaire médiatique ou polémique qui ne figure pas dans le rapport.\n"
+    "- N'utilise QUE le document fourni. N'invente aucun fait, chiffre, date ou référence. Si une information "
+    "manque, laisse le champ vide.\n"
+    "- Rédige en français."
+)
+
+
+def vnorm(s):
+    """Normalisation pour comparer une citation au texte (casse, accents, ponctuation, césures)."""
+    s = P.norm(s)
+    s = re.sub(r"(\w)- (\w)", r"\1\2", s)
+    return re.sub(r"[^\w%€$]+", " ", s).strip()
+
+
+def verbatim_ok(quote, ntext):
+    """La citation figure-t-elle (presque) mot pour mot dans le texte normalisé `ntext` ?"""
+    q = vnorm(quote)
+    if len(q) < 12 or not ntext:
+        return False
+    if q in ntext:
+        return True
+    w = q.split()
+    if len(w) < 6:
+        return False
+    sh = [" ".join(w[i:i + 5]) for i in range(len(w) - 4)]
+    return sum(1 for x in sh if x in ntext) / len(sh) >= 0.8
+
+
+# =====================================================================
+# Écriture Notion par morceaux (taille et nombre de blocs limités par requête)
+# =====================================================================
+def _blocks_count(b):
+    return 1 + len(b.get(b["type"], {}).get("children") or [])
+
+
+def chunk_blocks(blocks, max_n=90, max_chars=200000):
+    out, cur, n, size = [], [], 0, 0
+    for b in blocks:
+        c, s = _blocks_count(b), len(json.dumps(b, ensure_ascii=False))
+        if cur and (len(cur) >= max_n or n + c > 400 or size + s > max_chars):
+            out.append(cur)
+            cur, n, size = [], 0, 0
+        cur.append(b)
+        n += c
+        size += s
+    if cur:
+        out.append(cur)
+    return out
+
+
+def table_as_list(b):
+    """Repli si Notion refuse un tableau : une puce par ligne."""
+    if b.get("type") != "table":
+        return [b]
+    rows = b["table"].get("children") or []
+    out = []
+    for r in rows[1:]:
+        rich = []
+        for i, cell in enumerate(r["table_row"]["cells"]):
+            if not cell:
+                continue
+            if rich:
+                rich.append(F.plain_rt(" | ", "gray"))
+            rich += cell
+        out.append({"object": "block", "type": "bulleted_list_item", "bulleted_list_item": {"rich_text": rich[:90]}})
+    return out
+
+
+def put_blocks(n, page_id, holder, blocks):
+    """Remplace le contenu généré de la page : un bloc conteneur (synchronisé) supprimé puis recréé.
+    Les notes personnelles ajoutées hors du conteneur sont conservées."""
+    old = holder.get("container")
+    if old:
+        try:
+            n.req("DELETE", f"/blocks/{old}")
+        except RuntimeError:
+            pass
+    first = blocks[:1] if blocks and blocks[0]["type"] != "table" else [F.B("paragraph", "")]
+    rest = blocks[1:] if first == blocks[:1] else blocks
+    res = n.req("PATCH", f"/blocks/{page_id}/children", {"children": [{
+        "object": "block", "type": "synced_block", "synced_block": {"synced_from": None, "children": first}}]})
+    cont = res["results"][0]["id"]
+    holder["container"] = cont
+    for chunk in chunk_blocks(rest):
+        try:
+            n.req("PATCH", f"/blocks/{cont}/children", {"children": chunk})
+        except RuntimeError as e:
+            if not any(b["type"] == "table" for b in chunk):
+                raise
+            log.warning("Tableau refusé par Notion (%s) : présenté en liste", str(e)[:150])
+            flat = [x for b in chunk for x in table_as_list(b)]
+            for c2 in chunk_blocks(flat):
+                n.req("PATCH", f"/blocks/{cont}/children", {"children": c2})
+    return cont
+
+
+def notion_url(page_id):
+    return "https://www.notion.so/" + page_id.replace("-", "") if page_id else None
+
+
+# =====================================================================
+# Données détaillées de chaque fiche (pour les super fiches)
+# =====================================================================
+FICHE_V = 2  # 2 : éléments de langage, notions, avantages/limites des recommandations
+
+
+def data_path(k):
+    return os.path.join(STATE_DIR, "fiches", f"{k}.json")
+
+
+def load_data(k):
+    try:
+        with open(data_path(k), encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def save_data(k, d):
+    os.makedirs(os.path.dirname(data_path(k)), exist_ok=True)
+    with open(data_path(k), "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
 
 
 # =====================================================================
@@ -363,6 +520,7 @@ class RapNotion:
                 d = self.req("GET", f"/databases/{mem['db']}")
                 if self.is_ours(d):
                     self.db = d["id"]
+                    self.migrate(d)
             except RuntimeError:
                 pass
         if not self.db:
@@ -371,6 +529,7 @@ class RapNotion:
             for d in res.get("results", []):
                 if self.is_ours(d):
                     self.db = d["id"]
+                    self.migrate(d)
                     break
         if not self.db:
             if not self.page:
@@ -383,6 +542,26 @@ class RapNotion:
         if not mem.get("summary_anchor"):
             self.ensure_summary(st)
         return self.db
+
+    def migrate(self, d):
+        """Base créée par une version précédente : ajoute la colonne « Super fiche » et les nouveaux thèmes."""
+        props = d.get("properties") or {}
+        upd = {}
+        if "Super fiche" not in props:
+            upd["Super fiche"] = {"url": {}}
+        th = (props.get("Thèmes") or {}).get("multi_select")
+        if th is not None:
+            have = {o.get("name") for o in th.get("options", [])}
+            missing = [{"name": V.opt(k), "color": c} for k, c in theme_colors(self.cfg).items() if V.opt(k) not in have]
+            if missing:
+                upd["Thèmes"] = {"multi_select": {"options": [
+                    {k: o[k] for k in ("id", "name", "color") if k in o} for o in th.get("options", [])] + missing}}
+        if upd:
+            try:
+                self.req("PATCH", f"/databases/{d['id']}", {"properties": upd})
+                log.info("Base « Rapports publics » mise à jour : %s", ", ".join(upd))
+            except RuntimeError as e:
+                log.warning("Base « Rapports publics » non mise à jour : %s", e)
 
     def ensure_summary(self, st):
         if not self.page:
@@ -417,6 +596,7 @@ class RapNotion:
             "Lu": {"checkbox": {}},
             "Ajouté le": {"created_time": {}},
             "Lois liées": {"relation": {"database_id": dash_id, "type": "dual_property", "dual_property": {}}},
+            "Super fiche": {"url": {}},
         }
         d = self.req("POST", "/databases", {
             "parent": {"type": "page_id", "page_id": self.page}, "is_inline": True,
@@ -677,29 +857,37 @@ class Rapports:
     # ---------------- fiches ----------------
     def fiches(self):
         done = 0
+        fc = self.cfg["fiches"]
         q = self.st.get("queue", [])
-        for it in list(q):
-            if done >= self.cfg["fiches"]["fiches_par_passage"] or time_left(self.cfg) < 420:
+        todo = [("new", it) for it in q if "tri" in it and (self.dry or it.get("page"))]
+        if fc.get("reprendre_anciennes_fiches", True) and not self.dry:
+            # fiches rédigées par une version précédente : refaites quand la file des nouveautés est vide
+            todo += [("old", r) for r in self.st.get("done", [])
+                     if r.get("page") and r.get("v", 1) < FICHE_V and r.get("tries", 0) < 3]
+        for kind, it in todo:
+            if done >= fc["fiches_par_passage"] or time_left(self.cfg) < 420:
                 break
-            if "tri" not in it or (not self.dry and not it.get("page")):
-                continue
             if done:
-                time.sleep(0 if V.env("LEGI_TEST") else float(self.cfg["fiches"].get("pause_entre_fiches_secondes", 20)))
+                time.sleep(0 if V.env("LEGI_TEST") else float(fc.get("pause_entre_fiches_secondes", 20)))
             try:
-                self.build(it)
+                rec = self.build(it)
                 done += 1
                 self.counts["fiches"] += 1
-                q.remove(it)
-                self.st.setdefault("done", []).append({k: it.get(k) for k in ("url", "title", "organe", "date",
-                                                                              "page", "star", "liens")})
-                self.st["done"] = self.st["done"][-2000:]
+                if kind == "new":
+                    q.remove(it)
+                    self.st.setdefault("done", []).append(rec)
+                    self.st["done"] = self.st["done"][-2000:]
+                else:
+                    it.clear()
+                    it.update(rec)
+                    self.counts["reprises"] = self.counts.get("reprises", 0) + 1
             except V.QuotaExhausted as e:
                 log.warning("Fiches : quota IA épuisé (%s) — reprise au prochain passage", e)
                 break
             except Exception as e:  # noqa: BLE001
                 it["tries"] = it.get("tries", 0) + 1
                 log.warning("Fiche « %s » non rédigée (%d) : %s", it["title"][:80], it["tries"], e)
-                if it["tries"] >= 3:
+                if it["tries"] >= 3 and kind == "new":
                     q.remove(it)
             if not self.dry:
                 save_state(self.st)
@@ -734,9 +922,23 @@ class Rapports:
             mode = f"lu intégralement en {n_parts} parties"
         cands = self.legi.candidates(it["title"] + " " + body[:20000]) if self.legi.ok else []
         prompt = self.prompt(it, body, recs, cands, n_chars)
-        data = L.ask(self.llm, prompt, "flash", 16384)
+        data = L.ask(self.llm, prompt, "flash", 32768)
         if not isinstance(data, dict):
             raise ValueError("fiche illisible")
+        # éléments de langage : seules les formules retrouvées mot pour mot dans le rapport sont gardées
+        ntext = vnorm(full + "\n" + (doc.get("synth_text") or "") + "\n" + (doc.get("html_text") or ""))
+        lang = [x for x in (data.get("elements_de_langage") or []) if isinstance(x, dict)
+                and verbatim_ok(str(x.get("formule", "")), ntext)]
+        log.info("  éléments de langage : %d retrouvés mot pour mot sur %d proposés", len(lang),
+                 len(data.get("elements_de_langage") or []))
+        data["elements_de_langage"] = lang[:30]
+        # avantages / limites (analyse du rapport) rattachés aux recommandations relevées mot pour mot
+        ai_by = {str(r.get("numero")).strip(): r for r in (data.get("recommandations") or []) if isinstance(r, dict)}
+        for r in recs:
+            x = ai_by.get(r["num"]) or {}
+            for k in ("avantages", "limites", "echeance", "axe"):
+                r[k] = str(x.get(k) or "").strip()
+            r["dest"] = r["dest"] or str(x.get("destinataire") or "").strip()
         codes = {f"T{n + 1}": did for n, did in enumerate(cands)}
         liens = []
         for x in data.get("liens_lois") or []:
@@ -745,10 +947,33 @@ class Rapports:
         it["liens"] = [x["did"] for x in liens]
         pages = max(1, round(n_chars / 2800))
         lecture = ("PDF" if doc["pdf_text"] else "page web") + f" d'environ {pages} pages, {mode}"
+        themes = [x for x in (data.get("themes") or []) if x in self.themes][:5]
+        k = it.get("k") or V.url_key(it["url"])
+        if recs:
+            store_recs = recs
+        else:  # pas de liste numérotée détectée : transcription de l'IA, signalée comme telle
+            store_recs = [{"num": str(r.get("numero") or n), "kind": "Recommandation", "texte": str(r.get("texte", "")),
+                           "dest": str(r.get("destinataire") or ""), "echeance": str(r.get("echeance") or ""),
+                           "axe": str(r.get("axe") or ""), "avantages": str(r.get("avantages") or ""),
+                           "limites": str(r.get("limites") or ""), "ia": True}
+                          for n, r in enumerate(data.get("recommandations") or [], 1)
+                          if isinstance(r, dict) and r.get("texte")]
+        record = {"k": k, "url": it["url"], "title": (data.get("titre") or it["title"])[:400], "organe": it["organe"],
+                  "date": it.get("date"), "page": it.get("page"), "star": it.get("star"),
+                  "liens": [x["did"] for x in liens], "themes": themes, "type": data.get("type") or "", "v": FICHE_V}
         if self.dry:
             print(json.dumps({"titre": it["title"], "recs_verbatim": len(recs), "liens": liens,
                               "data": data}, ensure_ascii=False, indent=1)[:6000])
-            return
+            return record
+        save_data(k, dict(record, en_bref=data.get("en_bref", ""), contexte=data.get("contexte", ""),
+                          constats=[c for c in (data.get("constats") or []) if isinstance(c, dict)][:25],
+                          chiffres=[str(c) for c in (data.get("chiffres_cles") or [])][:30],
+                          enjeux=[str(c) for c in (data.get("enjeux") or [])][:12],
+                          langage=lang[:30], notions=[x for x in (data.get("notions_cles") or [])
+                                                      if isinstance(x, dict)][:25],
+                          recs=store_recs[:300], pdf_url=doc.get("pdf_url"),
+                          liens_detail=[{k2: x.get(k2) for k2 in ("did", "nature", "explication", "recommandations")}
+                                        for x in liens]))
         blocks = self.render(it, data, recs, liens, doc, lecture)
         # retire l'encadré provisoire « fiche en préparation » (les sous-pages personnelles sont conservées)
         try:
@@ -758,9 +983,7 @@ class Rapports:
                     self.notion.n.req("DELETE", f"/blocks/{blk['id']}")
         except RuntimeError as e:
             log.debug("Nettoyage de la page : %s", e)
-        t = {"fiche": {}}
-        F.write(self.notion.n, it["page"], t, blocks)
-        themes = [x for x in (data.get("themes") or []) if x in self.themes][:5]
+        put_blocks(self.notion.n, it["page"], {}, blocks)
         stages = [self.legi.textes[x["did"]]["stage"] for x in liens]
         link_kind = "Sans texte lié" if not liens else (
             "Texte en cours d'examen" if any(s not in (P.STAGES[8], P.STAGE_ORDONNANCE) for s in stages)
@@ -782,17 +1005,37 @@ class Rapports:
         self.notion.n.req("PATCH", f"/pages/{it['page']}", {"properties": props})
         log.info("  fiche « %s » : %d recommandation(s) relevée(s), %d texte(s) lié(s)", it["title"][:80],
                  len(recs), len(liens))
+        return record
 
     def prompt(self, it, body, recs, cands, n_chars):
+        if recs:
+            rec_schema = ('"recommandations": [{"numero": "numéro, tel que dans la liste relevée", "destinataire": "", '
+                          '"echeance": "", "axe": "partie ou orientation du rapport", "avantages": "…", '
+                          '"limites": "…"}]')
+            rec_rule = ("- Recommandations : leur texte exact est DÉJÀ relevé (liste fournie) ; ne le recopie pas. Pour "
+                        "CHACUNE (même numéro), donne seulement le destinataire, l'échéance, l'axe, et l'analyse que le "
+                        "rapport en fait.")
+        else:
+            rec_schema = ('"recommandations": [{"numero": "1", "texte": "texte EXACT, mot pour mot", "destinataire": "", '
+                          '"echeance": "", "axe": "partie ou orientation du rapport", "avantages": "…", "limites": "…"}]')
+            rec_rule = ("- Recommandations : reproduites MOT POUR MOT, sans reformulation. S'il n'y a pas de "
+                        "recommandations formelles, relève les propositions ou orientations formulées, citées exactement.")
         lines = [
             "Tu es un rapporteur expert des politiques publiques françaises. Tu rédiges la FICHE DE LECTURE TRÈS "
             "EXHAUSTIVE d'un rapport public, destinée à un haut fonctionnaire qui doit en maîtriser le contenu "
-            "sans le lire.",
-            F.NEUTRALITE,
-            "- Les recommandations sont reproduites MOT POUR MOT, sans reformulation, avec leur numéro, leur "
-            "destinataire et leur échéance s'ils sont indiqués. Si une liste relevée mot pour mot est fournie, "
-            "reprends-la à l'identique (tu peux seulement corriger les coupures de ligne). S'il n'y a pas de "
-            "recommandations formelles, relève les propositions ou orientations formulées, citées exactement.",
+            "sans le lire et pouvoir en reprendre les éléments de langage.",
+            STYLE,
+            rec_rule,
+            "- Avantages et limites de chaque recommandation : \"avantages\" = effets attendus, bénéfices, "
+            "justification, chiffrage ou économies que le rapport donne pour cette recommandation ; \"limites\" = "
+            "limites, risques, coûts, conditions de réussite, difficultés de mise en œuvre ou réserves exprimées dans "
+            "le rapport (ou dans les réponses des administrations, en les attribuant). Dans les termes du rapport. "
+            "Laisse vide si le rapport n'en dit rien : n'invente pas d'analyse.",
+            "- Éléments de langage : relève 15 à 30 formulations caractéristiques du rapport (formules-clés, "
+            "diagnostics, qualifications, mots d'ordre, expressions techniques propres au sujet), COPIÉES MOT POUR MOT "
+            "depuis le texte (elles seront vérifiées automatiquement dans le rapport ; une formule modifiée est rejetée).",
+            "- Notions clés : les notions, sigles, dispositifs et indicateurs du rapport, avec la définition qu'il en "
+            "donne, dans ses termes.",
             "- Chiffres : toujours avec l'unité, la date, le périmètre et la source mentionnés dans le rapport.",
             "- Sois exhaustif : couvre toutes les parties du rapport, pas seulement l'introduction.",
             f"- Thèmes : 1 à 5 choisis UNIQUEMENT dans {json.dumps(self.themes, ensure_ascii=False)}.",
@@ -803,16 +1046,21 @@ class Rapports:
             "Réponds UNIQUEMENT avec un objet JSON de cette forme :",
             '{"titre": "titre exact du rapport", "type": "type de document", '
             '"commanditaire": "saisine ou commande (commission, ministre, auto-saisine…), si indiqué", '
-            '"en_bref": "6 à 8 phrases : objet, constat principal, principales recommandations, portée", '
-            '"contexte": "2 à 4 paragraphes : contexte, cadre juridique et budgétaire, enjeux, état des lieux", '
+            '"en_bref": "6 à 8 phrases dans les termes du rapport : objet, constat principal, principales '
+            'recommandations, portée", '
+            '"elements_de_langage": [{"formule": "citation exacte (5 à 40 mots)", "sens": "ce qu\'elle désigne, '
+            'dans les termes du rapport"}], '
+            '"notions_cles": [{"terme": "", "definition": ""}], '
+            '"contexte": "2 à 4 paragraphes reprenant les formulations du rapport : contexte, cadre juridique et '
+            'budgétaire, enjeux, état des lieux", '
             '"perimetre_methode": "périmètre, période, méthode, sources mobilisées", '
             '"chiffres_cles": ["10 à 30 données chiffrées précises"], '
-            '"constats": [{"titre": "intitulé du constat", "developpement": "3 à 6 phrases : constat, '
-            'argumentaire, exemples et données à l\'appui"}], '
-            '"recommandations": [{"numero": "1", "texte": "texte exact", "destinataire": "", "echeance": "", '
-            '"axe": "partie ou thème du rapport"}], '
+            '"constats": [{"titre": "intitulé du constat, repris du rapport si possible", "developpement": "3 à 6 '
+            'phrases restituant l\'argumentaire du rapport avec ses propres formulations, exemples et données à '
+            'l\'appui"}], '
+            + rec_schema + ', '
             '"reponses": "réponses ou positions des administrations et organismes contrôlés, si publiées", '
-            '"enjeux": ["5 à 10 enjeux de politique publique soulevés, une à deux phrases chacun"], '
+            '"enjeux": ["5 à 10 enjeux de politique publique soulevés, dans les termes du rapport"], '
             '"suites_legislatives": ["recommandations qui supposeraient une loi, une loi de finances ou de '
             'financement de la sécurité sociale, ou un décret, en précisant le vecteur"], '
             '"liens_lois": [{"code": "T1", "nature": "enjeu commun | recommandation transposable | évaluation ou '
@@ -850,11 +1098,15 @@ class Rapports:
             prompt = "\n".join([
                 f"Tu lis la partie {n}/{len(parts)} du rapport « {it['title']} » ({it['organe']}). Prends des notes "
                 "de lecture EXHAUSTIVES et fidèles de CETTE partie, pour qu'un haut fonctionnaire n'ait pas à la lire.",
-                F.NEUTRALITE,
+                STYLE,
                 "Réponds UNIQUEMENT en JSON : {\"titres\": [\"titres des chapitres ou sections de la partie\"], "
-                "\"resume\": \"5 à 10 phrases\", \"constats\": [{\"titre\": \"\", \"developpement\": \"2 à 5 phrases, "
-                "argumentaire et exemples\"}], \"chiffres\": [\"donnée chiffrée avec unité, date, périmètre\"], "
-                "\"recommandations\": [\"recommandations ou propositions de la partie, MOT POUR MOT\"], "
+                "\"resume\": \"5 à 10 phrases reprenant les formulations du texte\", \"constats\": [{\"titre\": \"\", "
+                "\"developpement\": \"2 à 5 phrases, argumentaire et exemples, dans les termes du rapport\"}], "
+                "\"chiffres\": [\"donnée chiffrée avec unité, date, périmètre\"], "
+                "\"elements_de_langage\": [\"formulations caractéristiques copiées MOT POUR MOT (5 à 40 mots)\"], "
+                "\"recommandations\": [{\"texte\": \"recommandation ou proposition de la partie, MOT POUR MOT\", "
+                "\"avantages\": \"effets attendus, justification, chiffrage donnés par le rapport\", \"limites\": "
+                "\"limites, risques, coûts, conditions ou réserves mentionnés\"}], "
                 "\"positions\": [\"positions ou réponses d'acteurs, attribuées\"]}",
                 "", "=== TEXTE DE LA PARTIE ===", part])
             try:
@@ -882,6 +1134,19 @@ class Rapports:
                 out.append(B("bulleted_list_item", "", [pr(k + " : ", bold=True), pr(str(v)[:1800])]))
         if d.get("en_bref"):
             out += [B("heading_2", "En bref"), B("paragraph", d["en_bref"])]
+        if d.get("elements_de_langage"):
+            out.append(B("heading_2", "Éléments de langage du rapport"))
+            out.append(B("paragraph", "Formulations du rapport, reproduites mot pour mot (vérifiées dans le texte).",
+                         color="gray", italic=True))
+            for x in d["elements_de_langage"][:30]:
+                out.append(B("bulleted_list_item", "", [pr("« " + str(x.get("formule", ""))[:1500] + " »", italic=True)]
+                             + ([pr(" — " + str(x["sens"])[:600], "gray")] if x.get("sens") else [])))
+        notions = [x for x in (d.get("notions_cles") or []) if isinstance(x, dict) and x.get("terme")]
+        if notions:
+            out.append(B("heading_3", "Notions clés"))
+            for x in notions[:25]:
+                out.append(B("bulleted_list_item", "", [pr(str(x["terme"])[:200] + " : ", bold=True),
+                                                        pr(str(x.get("definition", ""))[:1500])]))
         # lien avec la loi (en tête : c'est l'information la plus utile)
         out.append(B("heading_2", "Lien avec les textes de loi"))
         if liens:
@@ -927,7 +1192,8 @@ class Rapports:
                 ech = extra.get("echeance") or ""
                 out.append(B("numbered_list_item", "", [pr(f"{r['kind']} n° {r['num']} : ", bold=True),
                                                         pr(r["texte"][:1800])] +
-                             ([pr(f"  [{dest}{' · ' + ech if ech else ''}]", "gray")] if dest or ech else [])))
+                             ([pr(f"  [{dest}{' · ' + ech if ech else ''}]", "gray")] if dest or ech else []) +
+                             self.av_lim(r.get("avantages"), r.get("limites"))))
         elif ai_recs:
             out.append(B("paragraph", "Recommandations transcrites par l'IA à partir du rapport (pas de liste "
                                       "numérotée détectée automatiquement) : à vérifier sur le document.",
@@ -939,7 +1205,8 @@ class Rapports:
                 tail = " · ".join(x for x in (r.get("destinataire"), r.get("echeance")) if x)
                 out.append(B("numbered_list_item", "", [pr(f"n° {r.get('numero', '')} : " if r.get("numero") else "",
                                                            bold=True), pr(str(r.get("texte", ""))[:1800])] +
-                             ([pr(f"  [{tail}]", "gray")] if tail else [])))
+                             ([pr(f"  [{tail}]", "gray")] if tail else []) +
+                             self.av_lim(r.get("avantages"), r.get("limites"))))
         else:
             out.append(B("paragraph", "Le document ne formule pas de recommandations numérotées.", color="gray"))
         if d.get("reponses"):
@@ -950,6 +1217,16 @@ class Rapports:
         if d.get("a_suivre"):
             out.append(B("heading_2", "À suivre"))
             out += [B("bulleted_list_item", str(x)) for x in d["a_suivre"][:8]]
+        return out
+
+    @staticmethod
+    def av_lim(av, lim):
+        out = []
+        if av:
+            out += [F.plain_rt("\n➕ Avantages selon le rapport : ", "green", bold=True), F.plain_rt(str(av)[:1500], "green")]
+        if lim:
+            out += [F.plain_rt("\n➖ Limites selon le rapport : ", "orange", bold=True),
+                    F.plain_rt(str(lim)[:1500], "orange")]
         return out
 
     # ---------------- synthèse en haut de page ----------------
@@ -1006,6 +1283,645 @@ class Rapports:
 
 
 # =====================================================================
+# Dossiers thématiques et super fiches
+# =====================================================================
+NATURES = ["Législative", "Réglementaire", "Budgétaire", "Organisationnelle", "Connaissance et évaluation"]
+PRIO_COLOR = {"Prioritaire": "red", "Importante": "orange", "Complémentaire": "gray"}
+SUPER = "Super fiche · "
+
+
+def org_short(organe):
+    return re.sub(r"\s*\(.*?\)\s*", " ", organe or "").strip()
+
+
+class Dossiers:
+    """Dossiers thématiques (sous-pages de « Veille administrative ») et super fiches 🔷.
+    Arborescence : Veille administrative › famille (💶 Finances publiques et fiscalité…) › thème
+    (📂 Finances publiques et dette…) › super fiches (🔷). Les fiches simples (📑) restent dans la base
+    « Rapports publics » ; chaque dossier de thème en donne la liste."""
+
+    def __init__(self, R):
+        self.R, self.cfg, self.st, self.llm, self.legi = R, R.cfg, R.st, R.llm, R.legi
+        self.n = R.notion.n if R.notion else None
+        self.root = R.notion.page if R.notion else ""
+        self.sc = self.cfg.get("super_fiches") or {}
+        self.mem = self.st.setdefault("dossiers", {})
+        for k in ("pages", "sujets", "themes"):
+            self.mem.setdefault(k, {})
+        self.counts = {"sujets": 0, "super": 0, "dossiers": 0}
+
+    def reports(self):
+        return [r for r in self.st.get("done", []) if r.get("k") and r.get("v", 1) >= FICHE_V]
+
+    def run(self):
+        if self.R.dry or not self.sc.get("actif", True) or not self.root or not self.n:
+            return
+        try:
+            self.cluster()
+        except V.QuotaExhausted as e:
+            log.warning("Regroupement par sujet : quota IA épuisé (%s) — reprise au prochain passage", e)
+        except (ValueError, KeyError, TypeError) as e:
+            log.warning("Regroupement par sujet impossible pour ce passage : %s", e)
+        self.build_supers()
+        try:
+            self.theme_pages()
+        except RuntimeError as e:
+            log.warning("Dossiers thématiques non mis à jour : %s", e)
+        self.prune()
+
+    # ---------------- regroupement des rapports par sujet ----------------
+    def add(self, sid, ks):
+        s = self.mem["sujets"][sid]
+        for k in ks:
+            if k and k not in s["members"]:
+                s["members"].append(k)
+                s["dirty"] = True
+
+    def cluster(self):
+        reps = self.reports()
+        by_k = {r["k"]: r for r in reps}
+        subj = self.mem["sujets"]
+        per = int(self.sc.get("regroupement_par_appel", 20))
+        for _ in range(3):
+            new = [r for r in reps if not r.get("cl")][:per]
+            if not new or time_left(self.cfg) < 600:
+                return
+            pool = [r for r in reps if r.get("cl")][-250:]
+            if not pool and len(new) < 2:
+                return  # un seul rapport : rien à regrouper pour l'instant
+            codes = {}
+            lines = [
+                "Tu organises une veille de rapports publics pour un haut fonctionnaire. Tu regroupes les rapports par "
+                "SUJET afin de constituer des « super fiches » de synthèse.",
+                "Un sujet réunit des rapports qui traitent de la même politique publique, du même dispositif ou du même "
+                "problème, ou qui se complètent (par exemple un rapport de la Cour des comptes et un rapport "
+                "d'information parlementaire sur le même dispositif ; un avis du HCFP et une note du Trésor sur la "
+                "trajectoire des finances publiques). Un sujet est plus précis qu'un thème (« Financement des retraites "
+                "des fonctionnaires de l'État », « Prévention de la perte d'autonomie », « Trajectoire des finances "
+                "publiques ») mais assez large pour réunir des rapports complémentaires. Le libellé reprend les termes "
+                "employés par les rapports eux-mêmes.",
+                "Pour CHAQUE nouveau rapport (codes N…), réponds : \"sujets\" = codes des sujets existants (S…) qu'il "
+                "traite (0 à 2) ; \"nouveau\" = s'il forme un NOUVEAU sujet avec d'autres rapports (codes P… ou N…) "
+                "portant sur le même objet : {\"libelle\": \"intitulé du sujet\", \"avec\": [\"codes de ces "
+                "rapports\"]}, sinon null. Ne réunis pas des rapports qui n'ont en commun qu'un thème général. Un rapport "
+                "sans objet commun avec un autre reste seul (sujets vides, nouveau null).",
+                'Réponds UNIQUEMENT avec {"items": [{"id": "N1", "sujets": [], "nouveau": null}]}.', ""]
+            lines.append("=== NOUVEAUX RAPPORTS À RATTACHER ===")
+            for i, r in enumerate(new, 1):
+                codes[f"N{i}"] = ("R", r["k"])
+                d = load_data(r["k"]) or {}
+                lines.append(f"N{i} = {org_short(r['organe'])[:50]} — {r['title'][:200]} "
+                             f"[{', '.join(r.get('themes') or [])}]\n   {str(d.get('en_bref', ''))[:500]}")
+            subs = sorted(subj.items(), key=lambda kv: kv[1].get("upd") or kv[1].get("created") or "", reverse=True)
+            lines += ["", "=== SUJETS EXISTANTS ==="]
+            for i, (sid, s) in enumerate(subs[:150], 1):
+                codes[f"S{i}"] = ("S", sid)
+                titles = " ; ".join(by_k[k]["title"][:90] for k in s["members"][:3] if k in by_k)
+                lines.append(f"S{i} = {s['label']} ({len(s['members'])} rapports : {titles})")
+            lines += ["", "=== RAPPORTS DÉJÀ TRAITÉS ==="]
+            for i, r in enumerate(reversed(pool), 1):  # les plus récents d'abord
+                codes[f"P{i}"] = ("R", r["k"])
+                lines.append(f"P{i} = {org_short(r['organe'])[:50]} — {r['title'][:160]} "
+                             f"[{', '.join(r.get('themes') or [])}]")
+            out = L.ask(self.llm, "\n".join(lines), "lite", 8192)
+            items = out.get("items") if isinstance(out, dict) else out
+            created = {P.norm(s["label"]): sid for sid, s in subj.items()}
+            for x in items or []:
+                if not isinstance(x, dict):
+                    continue
+                c = codes.get(str(x.get("id")))
+                if not c or c[0] != "R":
+                    continue
+                k = c[1]
+                for code in (x.get("sujets") or [])[:2]:
+                    t = codes.get(str(code))
+                    if t and t[0] == "S":
+                        self.add(t[1], [k])
+                nv = x.get("nouveau")
+                if isinstance(nv, dict) and str(nv.get("libelle") or "").strip():
+                    others = []
+                    for o in nv.get("avec") or []:
+                        t = codes.get(str(o))
+                        if t and t[0] == "R" and t[1] != k:
+                            others.append(t[1])
+                    lab = str(nv["libelle"]).strip()[:150]
+                    key = P.norm(lab)
+                    if key in created:
+                        self.add(created[key], [k] + others)
+                    elif others:
+                        sid = "s" + P.sha(lab, TODAY, k)[:10]
+                        subj[sid] = {"label": lab, "members": [], "created": TODAY}
+                        created[key] = sid
+                        self.add(sid, [k] + others)
+                        self.counts["sujets"] += 1
+                        log.info("  nouveau sujet : %s", lab)
+            for r in new:
+                r["cl"] = True
+            save_state(self.st)
+
+    # ---------------- super fiches ----------------
+    def build_supers(self):
+        by_k = {r["k"]: r for r in self.reports()}
+        todo = [(sid, s) for sid, s in self.mem["sujets"].items()
+                if s.get("dirty") and s.get("tries", 0) < 3 and sum(k in by_k for k in s["members"]) >= 2]
+        todo.sort(key=lambda x: -len(x[1]["members"]))
+        done = 0
+        for sid, s in todo:
+            if done >= int(self.sc.get("super_fiches_par_passage", 2)) or time_left(self.cfg) < 400:
+                break
+            if done:
+                time.sleep(0 if V.env("LEGI_TEST") else float(self.sc.get("pause_secondes", 30)))
+            try:
+                self.build_super(s, by_k)
+                done += 1
+                self.counts["super"] += 1
+            except V.QuotaExhausted as e:
+                log.warning("Super fiches : quota IA épuisé (%s) — reprise au prochain passage", e)
+                break
+            except Exception as e:  # noqa: BLE001
+                s["tries"] = s.get("tries", 0) + 1
+                log.warning("Super fiche « %s » non rédigée (%d) : %s", s["label"][:80], s["tries"], e)
+            save_state(self.st)
+
+    def main_theme(self, ds):
+        cnt = {}
+        for i, d in enumerate(ds):
+            for j, t in enumerate(d.get("themes") or []):
+                cnt[t] = cnt.get(t, 0) + 10 - min(j, 5)  # le premier thème d'un rapport pèse davantage
+        if cnt:
+            return max(cnt, key=lambda t: cnt[t])
+        tl = theme_list(self.cfg)
+        return "Institutions et administration" if "Institutions et administration" in tl else tl[0]
+
+    def build_super(self, s, by_k):
+        members = sorted([by_k[k] for k in s["members"] if k in by_k], key=lambda r: r.get("date") or "", reverse=True)
+        ds = []
+        for r in members:
+            d = load_data(r["k"])
+            if d:
+                d.update(page=r.get("page"), title=r["title"], themes=r.get("themes") or d.get("themes") or [])
+                ds.append(d)
+        if len(ds) < 2:
+            s["dirty"] = False
+            return
+        A = {f"A{i}": d for i, d in enumerate(ds, 1)}
+        recs = []
+        for ac, d in A.items():
+            for r in d.get("recs") or []:
+                recs.append((f"R{len(recs) + 1}", ac, d, r))
+        langs = []
+        for ac, d in A.items():
+            for x in (d.get("langage") or [])[:30]:
+                langs.append((f"L{len(langs) + 1}", ac, d, x))
+        cand = []
+        for d in ds:
+            for did in d.get("liens") or []:
+                if did in self.legi.textes and did not in cand:
+                    cand.append(did)
+        if self.legi.ok:
+            txt = s["label"] + " " + " ".join(d["title"] + " " + " ".join(d.get("enjeux") or [])[:1500] for d in ds[:30])
+            for did in self.legi.candidates(txt, k=12):
+                if did not in cand:
+                    cand.append(did)
+        cand = cand[:20]
+        data = L.ask(self.llm, self.super_prompt(s, A, recs, langs, cand), "flash", 32768)
+        if not isinstance(data, dict):
+            raise ValueError("super fiche illisible")
+        themes = sorted({t for d in ds for t in d.get("themes") or []})
+        theme = s.get("theme") or self.main_theme(ds)
+        blocks = self.render_super(s, data, A, recs, langs, cand)
+        title = F.STAR + SUPER + s["label"]
+        for attempt in (0, 1):
+            try:
+                if not s.get("page"):
+                    s["page"] = self.create_page(self.theme_page(theme, check=bool(attempt)), title, "🔷")
+                    s.pop("container", None)
+                put_blocks(self.n, s["page"], s, blocks)
+                break
+            except RuntimeError as e:
+                if attempt:
+                    raise
+                log.warning("Super fiche « %s » : page introuvable (%s), recréée", s["label"][:60], str(e)[:120])
+                s["page"] = None
+        self.n.req("PATCH", f"/pages/{s['page']}", {"properties": {"title": L.title_prop(title)}})
+        s.update(dirty=False, upd=NOW.isoformat(), star=NOW.isoformat(), theme=theme, themes=themes, n=len(ds), tries=0)
+        for d in ds:
+            if d.get("page"):
+                try:
+                    self.n.req("PATCH", f"/pages/{d['page']}", {"properties": {
+                        "Super fiche": {"url": notion_url(s["page"])}}})
+                except RuntimeError as e:
+                    log.debug("Colonne « Super fiche » non renseignée : %s", e)
+        log.info("  🔷 super fiche « %s » : %d rapports, %d recommandations", s["label"][:80], len(ds), len(recs))
+
+    def super_prompt(self, s, A, recs, langs, cand):
+        maxr = int(self.sc.get("rapports_lus_max", 30))
+        lines = [
+            "Tu rédiges une SUPER FICHE : la synthèse de plusieurs rapports publics qui portent sur le même sujet ou "
+            "se complètent, destinée à un haut fonctionnaire qui doit maîtriser le sujet et en reprendre les éléments "
+            "de langage.",
+            f"SUJET : {s['label']}",
+            STYLE,
+            "- Ici, « le rapport » désigne chacun des rapports réunis (codes A1, A2…) : chaque diagnostic, formule ou "
+            "appréciation reprise est attribuée à son auteur (« la Cour des comptes relève… », « le Sénat "
+            "préconise… »). Ne fusionne pas des positions différentes : expose-les chacune dans ses termes.",
+            "- Classement des recommandations : classe TOUTES les recommandations (codes R…), chacune une seule fois, "
+            "dans 3 à 8 catégories pertinentes pour le sujet (leviers d'action : gouvernance et pilotage, "
+            "financement, organisation, droits et prestations, connaissance et évaluation…, à adapter au sujet et "
+            "à nommer avec les termes des rapports). Ordonne les catégories de la plus structurante à la plus "
+            "secondaire, et dans chaque catégorie les recommandations par priorité. Priorité : « Prioritaire », "
+            "« Importante » ou « Complémentaire », d'après ce que disent les rapports (urgence, échéance, importance "
+            "soulignée, enjeu budgétaire, convergence de plusieurs rapports). Nature : "
+            + " | ".join(NATURES) + " (vecteur de mise en œuvre).",
+            "- Recommandations convergentes : signale les recommandations de rapports différents qui se rejoignent "
+            "ou se complètent.",
+            "- Éléments de langage : choisis parmi les formules relevées mot pour mot (codes L…) les 15 à 30 plus "
+            "structurantes pour le sujet, dans un ordre logique. N'en écris pas de nouvelles.",
+            "- Textes législatifs : parmi les textes proposés (T1, T2…), retiens ceux qui portent sur le sujet ou "
+            "pourraient accueillir une recommandation ; n'en retiens aucun si le lien est faible.",
+            "Réponds UNIQUEMENT avec un objet JSON de cette forme :",
+            '{"presentation": "2 à 3 paragraphes : ce qu\'examine chaque rapport et comment ils se complètent", '
+            '"enjeux": [{"titre": "intitulé repris des rapports", "developpement": "4 à 8 phrases restituant les '
+            'diagnostics avec les formulations des rapports, attribuées", "rapports": ["A1"]}], '
+            '"convergences": ["constats partagés, attribués"], '
+            '"divergences": ["points de divergence ou éclairages différents, attribués"], '
+            '"chiffres_cles": [{"donnee": "donnée chiffrée avec unité, date, périmètre", "rapport": "A1"}], '
+            '"langage": ["L3", "L1"], '
+            '"classement": {"critere": "critère de classement retenu, en une phrase", "categories": [{"nom": "", '
+            '"presentation": "1 à 2 phrases dans les termes des rapports", "recommandations": [{"id": "R3", '
+            '"nature": "Législative", "priorite": "Prioritaire"}]}]}, '
+            '"convergences_recos": [{"ids": ["R1", "R7"], "commentaire": "en quoi elles se rejoignent"}], '
+            '"liens_lois": [{"code": "T1", "explication": "2 à 3 phrases", "recommandations": ["R3"]}], '
+            '"a_suivre": ["échéances et suites annoncées par les rapports"]}',
+            "Limites : 4 à 10 enjeux ; 10 à 25 chiffres clés.", ""]
+        budget = max(4000, 240000 // max(1, min(len(A), maxr)))
+        lines.append("=== RAPPORTS RÉUNIS ===")
+        for i, (ac, d) in enumerate(A.items()):
+            head = f"{ac} = {d['organe']} — {F.fr_date(d.get('date'))} — {d.get('type') or 'rapport'} — {d['title']}"
+            if i >= maxr:
+                lines.append(head + " (rapport plus ancien : seules ses recommandations sont fournies)")
+                continue
+            parts = [head, "En bref : " + str(d.get("en_bref", "")), "Contexte : " + str(d.get("contexte", ""))[:3000],
+                     "Constats : " + " ".join(f"[{c.get('titre', '')}] {c.get('developpement', '')}"
+                                               for c in d.get("constats") or []),
+                     "Chiffres : " + " ; ".join(d.get("chiffres") or []),
+                     "Enjeux : " + " ; ".join(d.get("enjeux") or []),
+                     "Notions : " + " ; ".join(f"{x.get('terme')} : {x.get('definition')}" for x in d.get("notions") or [])]
+            lines.append("\n".join(parts)[:budget])
+            lines.append("")
+        lines.append("=== ÉLÉMENTS DE LANGAGE RELEVÉS MOT POUR MOT ===")
+        for code, ac, d, x in langs[:300]:
+            lines.append(f"{code} [{ac}] « {str(x.get('formule', ''))[:300]} »")
+        lines += ["", "=== RECOMMANDATIONS (texte exact) ==="]
+        for code, ac, d, r in recs[:450]:
+            extra = "".join(f" | {lab} : {str(r.get(k))[:220]}" for k, lab in (("avantages", "avantages"),
+                                                                                ("limites", "limites")) if r.get(k))
+            lines.append(f"{code} [{ac}, n° {r.get('num')}] {str(r.get('texte', ''))[:380]}{extra}")
+        lines.append("")
+        if cand:
+            lines.append("=== TEXTES LÉGISLATIFS SUIVIS (en cours d'examen ou promulgués récemment) ===")
+            for n, did in enumerate(cand, 1):
+                lines.append(f"T{n} = {self.legi.describe(did)}")
+        else:
+            lines.append("(Aucun texte législatif suivi ne paraît proche : laisse \"liens_lois\" vide.)")
+        return "\n".join(lines)
+
+    # ---------------- rendu de la super fiche ----------------
+    def rec_label(self, d, r):
+        return f"{org_short(d['organe'])[:60]} n° {r.get('num')}"
+
+    def rec_tables(self, rows):
+        pr, lk = F.plain_rt, F.link_rt
+        header = ["Rang", "Recommandation (texte exact)", "Rapport", "Nature · destinataire",
+                  "Avantages (selon le rapport)", "Limites (selon le rapport)"]
+
+        def row(cells):
+            return {"object": "block", "type": "table_row", "table_row": {"cells": cells}}
+        out = []
+        for i in range(0, len(rows), 40):
+            trs = [row([[pr(h, bold=True)] for h in header])]
+            for rank, prio, nat, ac, d, r in rows[i:i + 40]:
+                trs.append(row([
+                    [pr(str(rank), bold=True)] + ([pr("\n" + prio, PRIO_COLOR.get(prio, "gray"))] if prio else []),
+                    [pr(f"{r.get('kind') or 'Recommandation'} n° {r.get('num')} : ", bold=True),
+                     pr(str(r.get("texte", ""))[:1800])] +
+                    ([pr(" (transcription IA, à vérifier)", "gray", italic=True)] if r.get("ia") else []),
+                    [lk(org_short(d["organe"])[:80], notion_url(d.get("page")) or d["url"], bold=True),
+                     pr(" (" + F.fr_date(d.get("date")) + ")\n" if d.get("date") else "\n", "gray"),
+                     pr(d["title"][:160] + "\n", "gray"), lk("→ rapport", d["url"], "gray")],
+                    [pr(nat or "")] + ([pr("\n" + str(r["dest"])[:300], "gray")] if r.get("dest") else []) +
+                    ([pr("\n" + str(r["echeance"])[:100], "gray")] if r.get("echeance") else []),
+                    [pr(str(r["avantages"])[:1800], "green")] if r.get("avantages") else [],
+                    [pr(str(r["limites"])[:1800], "orange")] if r.get("limites") else [],
+                ]))
+            out.append({"object": "block", "type": "table", "table": {
+                "table_width": len(header), "has_column_header": True, "has_row_header": False, "children": trs}})
+        return out
+
+    def render_super(self, s, data, A, recs, langs, cand):
+        B, pr, lk = F.B, F.plain_rt, F.link_rt
+        orgs = sorted({org_short(d["organe"]) for d in A.values()})
+        out = [F.callout(f"SUPER FICHE — synthèse de {len(A)} rapports sur « {s['label']} »", "🔷", "blue_background",
+                         [pr("\n" + " · ".join(orgs)[:1500], "blue")])]
+        out.append(B("paragraph", f"Mise à jour le {NOW:%d/%m/%Y}. Rédigée à partir des rapports, avec leurs propres "
+                                  "formulations ; les recommandations sont reproduites mot pour mot, avec l'analyse "
+                                  "(avantages, limites) donnée par chaque rapport, et classées par l'IA. Les fiches "
+                                  "simples des rapports sont marquées 📑.", color="gray", italic=True))
+        out.append(B("heading_2", "📑 Rapports réunis"))
+        for ac, d in A.items():
+            out.append(B("bulleted_list_item", "", [
+                pr(f"{ac} · {F.fr_date(d.get('date'))} — ", "gray"), pr(org_short(d["organe"])[:80] + " : ", bold=True),
+                lk(d["title"][:220], notion_url(d.get("page")) or d["url"]), pr("  "), lk("→ rapport", d["url"], "gray")]))
+        src = {ac: org_short(d["organe"]) for ac, d in A.items()}
+
+        def who(codes):
+            names = []
+            for c in codes or []:
+                if src.get(str(c)) and src[str(c)] not in names:
+                    names.append(src[str(c)])
+            return [pr("  (" + ", ".join(names)[:300] + ")", "gray")] if names else []
+        if data.get("presentation"):
+            out.append(B("heading_2", "Présentation"))
+            out += [B("paragraph", p) for p in re.split(r"\n\s*\n", str(data["presentation"])) if p.strip()][:5]
+        enj = [e for e in data.get("enjeux") or [] if isinstance(e, dict)]
+        if enj:
+            out.append(B("heading_2", "Grands enjeux"))
+            for i, e in enumerate(enj[:10], 1):
+                out.append(B("heading_3", f"{i}. {e.get('titre', '')}"))
+                out.append(B("paragraph", "", [pr(str(e.get("developpement", ""))[:5000])] + who(e.get("rapports"))))
+        if data.get("convergences") or data.get("divergences"):
+            out.append(B("heading_2", "Convergences et différences d'approche"))
+            out += [B("bulleted_list_item", "", [pr("Convergence : ", "green", bold=True), pr(str(x)[:1800])])
+                    for x in (data.get("convergences") or [])[:10]]
+            out += [B("bulleted_list_item", "", [pr("Différence d'approche : ", "orange", bold=True), pr(str(x)[:1800])])
+                    for x in (data.get("divergences") or [])[:10]]
+        out += self.render_lois(data, A, recs, cand)
+        # éléments de langage (formules vérifiées mot pour mot dans les rapports)
+        lmap = {code: (ac, d, x) for code, ac, d, x in langs}
+        chosen = [str(c) for c in data.get("langage") or [] if str(c) in lmap]
+        if not chosen:
+            seen_ac = {}
+            for code, ac, d, x in langs:
+                seen_ac[ac] = seen_ac.get(ac, 0) + 1
+                if seen_ac[ac] <= 4:
+                    chosen.append(code)
+        if chosen:
+            out.append(B("heading_2", "🗣️ Éléments de langage"))
+            out.append(B("paragraph", "Formulations des rapports, reproduites mot pour mot (vérifiées dans le texte "
+                                      "de chaque rapport).", color="gray", italic=True))
+            for c in list(dict.fromkeys(chosen))[:35]:
+                ac, d, x = lmap[c]
+                out.append(B("bulleted_list_item", "", [pr("« " + str(x.get("formule", ""))[:1500] + " »", italic=True),
+                                                        pr(" — "), lk(org_short(d["organe"])[:80],
+                                                                       notion_url(d.get("page")) or d["url"], "gray")]))
+        notions, seen = [], set()
+        for ac, d in A.items():
+            for x in d.get("notions") or []:
+                key = P.norm(str(x.get("terme", "")))
+                if key and key not in seen:
+                    seen.add(key)
+                    notions.append((d, x))
+        if notions:
+            out.append(B("heading_3", "Notions clés"))
+            for d, x in notions[:25]:
+                out.append(B("bulleted_list_item", "", [pr(str(x["terme"])[:200] + " : ", bold=True),
+                                                        pr(str(x.get("definition", ""))[:1500]),
+                                                        pr(f"  ({org_short(d['organe'])[:60]})", "gray")]))
+        ch = [c for c in data.get("chiffres_cles") or [] if isinstance(c, dict) and c.get("donnee")]
+        if ch:
+            out.append(B("heading_2", "Chiffres clés"))
+            out += [B("bulleted_list_item", "", [pr(str(c["donnee"])[:1500])] + who([c.get("rapport")])) for c in ch[:25]]
+        out += self.render_recs(data, recs)
+        conv = [c for c in data.get("convergences_recos") or [] if isinstance(c, dict)]
+        rmap = {code: (ac, d, r) for code, ac, d, r in recs}
+        if conv:
+            out.append(B("heading_2", "🔗 Recommandations convergentes"))
+            for c in conv[:20]:
+                labs = [self.rec_label(rmap[str(i)][1], rmap[str(i)][2]) for i in c.get("ids") or [] if str(i) in rmap]
+                if len(labs) >= 2:
+                    out.append(B("bulleted_list_item", "", [pr(" ↔ ".join(labs)[:600] + " : ", bold=True),
+                                                            pr(str(c.get("commentaire", ""))[:1500])]))
+        if data.get("a_suivre"):
+            out.append(B("heading_2", "À suivre"))
+            out += [B("bulleted_list_item", str(x)) for x in data["a_suivre"][:10]]
+        return out
+
+    def render_lois(self, data, A, recs, cand):
+        B, pr, lk = F.B, F.plain_rt, F.link_rt
+        codes = {f"T{n}": did for n, did in enumerate(cand, 1)}
+        rmap = {code: (ac, d, r) for code, ac, d, r in recs}
+        items = {}
+        for x in data.get("liens_lois") or []:
+            if isinstance(x, dict) and x.get("code") in codes:
+                labs = [self.rec_label(rmap[str(i)][1], rmap[str(i)][2]) for i in x.get("recommandations") or []
+                        if str(i) in rmap]
+                items[codes[x["code"]]] = (str(x.get("explication", "")), labs)
+        for d in A.values():  # liens établis par les fiches des rapports
+            for x in d.get("liens_detail") or []:
+                did = x.get("did")
+                if did in self.legi.textes and did not in items:
+                    items[did] = (f"{org_short(d['organe'])} : {x.get('explication', '')}", [])
+        enacted = (P.STAGES[8], P.STAGE_ORDONNANCE)
+        cours = [d for d in items if self.legi.textes[d]["stage"] not in enacted]
+        recent = [d for d in items if self.legi.textes[d]["stage"] in enacted]
+        out = [B("heading_2", "⚖️ Textes législatifs en cours sur le sujet")]
+        if not items:
+            out.append(B("paragraph", "Aucun texte législatif en cours d'examen ou récemment promulgué ne porte "
+                                      "directement sur ce sujet.", color="gray"))
+            return out
+        for label, group in (("Textes en cours d'examen", cours), ("Lois récentes (mise en application)", recent)):
+            if not group:
+                continue
+            out.append(B("heading_3", label))
+            for did in group:
+                t = self.legi.textes[did]
+                expl, labs = items[did]
+                out.append(B("bulleted_list_item", "", [
+                    lk(t["short"][:200], notion_url(t.get("page")), bold=True), pr(f" — {t['stage']}", "gray"),
+                    pr("\n" + expl[:1500])] + ([pr("\nRecommandations concernées : " + " ; ".join(labs)[:800], "gray")]
+                                               if labs else [])))
+        return out
+
+    def render_recs(self, data, recs):
+        B, pr = F.B, F.plain_rt
+        rmap = {code: (ac, d, r) for code, ac, d, r in recs}
+        cl = data.get("classement") if isinstance(data.get("classement"), dict) else {}
+        out = [B("heading_2", f"📋 Tableau des recommandations ({len(recs)})")]
+        out.append(B("paragraph", "", [pr("Classement retenu : ", bold=True),
+                                       pr(str(cl.get("critere") or "par levier d'action et par priorité")[:600]),
+                                       pr(". Texte exact des recommandations ; avantages et limites tels que les "
+                                          "rapports les présentent (cases vides lorsque le rapport n'en dit rien).",
+                                          "gray")]))
+        used, rank, cats = set(), 0, []
+        for c in cl.get("categories") or []:
+            if not isinstance(c, dict):
+                continue
+            rows = []
+            for x in c.get("recommandations") or []:
+                code = str(x.get("id") if isinstance(x, dict) else x)
+                if code in rmap and code not in used:
+                    used.add(code)
+                    nat = x.get("nature", "") if isinstance(x, dict) else ""
+                    prio = x.get("priorite", "") if isinstance(x, dict) else ""
+                    rows.append((prio, nat if nat in NATURES else "", code))
+            if rows:
+                cats.append((str(c.get("nom") or "Recommandations"), str(c.get("presentation") or ""), rows))
+        rest = [("", "", code) for code, ac, d, r in recs if code not in used]
+        if rest:
+            cats.append(("Autres recommandations" if cats else "Recommandations", "", rest))
+        for i, (nom, pres, rows) in enumerate(cats, 1):
+            out.append(B("heading_3", f"{i}. {nom[:200]} ({len(rows)})"))
+            if pres:
+                out.append(B("paragraph", pres[:1500], color="gray"))
+            trs = []
+            for prio, nat, code in rows:
+                rank += 1
+                ac, d, r = rmap[code]
+                trs.append((rank, prio, nat, ac, d, r))
+            out += self.rec_tables(trs)
+        return out
+
+    # ---------------- pages Notion ----------------
+    def create_page(self, parent, title, icon, children=None):
+        body = {"parent": {"type": "page_id", "page_id": parent}, "icon": {"type": "emoji", "emoji": icon},
+                "properties": {"title": L.title_prop(title)}}
+        if children:
+            body["children"] = children
+        try:
+            return self.n.req("POST", "/pages", body)["id"]
+        except RuntimeError as e:
+            if "emoji" not in str(e):
+                raise
+            body["icon"] = {"type": "emoji", "emoji": "📁"}
+            return self.n.req("POST", "/pages", body)["id"]
+
+    def child_page(self, parent, title, icon, check=False, children=None):
+        key = f"{parent}|{title}"
+        pages = self.mem["pages"]
+        pid = pages.get(key)
+        if pid and check:
+            try:
+                p = self.n.req("GET", f"/pages/{pid}")
+                if p.get("archived") or p.get("in_trash"):
+                    pid = None
+            except RuntimeError:
+                pid = None
+            if not pid:
+                pages.pop(key, None)
+        if pid:
+            return pid
+        cursor = None
+        while True:
+            res = self.n.req("GET", f"/blocks/{parent}/children?page_size=100" + (f"&start_cursor={cursor}" if cursor else ""))
+            for b in res.get("results", []) or []:
+                if b.get("type") == "child_page" and P.norm(b["child_page"].get("title", "")) == P.norm(title) \
+                        and not b.get("archived") and not b.get("in_trash"):
+                    pages[key] = b["id"]
+                    return b["id"]
+            if not res.get("has_more"):
+                break
+            cursor = res.get("next_cursor")
+        pages[key] = self.create_page(parent, title, icon, children)
+        self.counts["dossiers"] += 1
+        return pages[key]
+
+    def theme_page(self, theme, check=False):
+        fam = family_of(self.cfg, theme) or {"famille": "Autres thèmes", "icone": "📁", "couleur": "default", "themes": []}
+        col = fam.get("couleur", "default")
+        intro = [F.callout(f"Dossier « {fam['famille']} » : un sous-dossier par thème. Chaque thème réunit ses super "
+                           "fiches 🔷 (synthèse de plusieurs rapports sur un même sujet) et la liste de ses fiches de "
+                           "rapport 📑.", fam.get("icone") or "📁",
+                           (col + "_background") if col != "default" else "gray_background")]
+        fp = self.child_page(self.root, fam["famille"], fam.get("icone") or "📁", check, intro)
+        return self.child_page(fp, theme, "📂", check)
+
+    # ---------------- dossiers de thème ----------------
+    def theme_pages(self):
+        reps = self.reports()
+        subj = self.mem["sujets"]
+        days = self.cfg["fiches"]["etoile_jours"]
+        for s in subj.values():  # ⭐ des super fiches mises à jour il y a plus de N jours
+            if s.get("star") and s.get("page") and days_since(s["star"]) > days:
+                try:
+                    self.n.req("PATCH", f"/pages/{s['page']}", {"properties": {"title": L.title_prop(SUPER + s["label"])}})
+                except RuntimeError as e:
+                    log.debug("Étoile non retirée : %s", e)
+                s["star"] = None
+        by_theme, sup_by_theme, k_sub = {}, {}, {}
+        for r in reps:
+            for t in r.get("themes") or []:
+                by_theme.setdefault(t, []).append(r)
+        for s in subj.values():
+            if not s.get("page"):
+                continue
+            for t in s.get("themes") or [s.get("theme")]:
+                sup_by_theme.setdefault(t, []).append(s)
+            for k in s["members"]:
+                k_sub.setdefault(k, []).append(s)
+        for theme in sorted(set(by_theme) | set(sup_by_theme), key=lambda t: -len(by_theme.get(t, []))):
+            if time_left(self.cfg) < 180:
+                break
+            rs = sorted(by_theme.get(theme, []), key=lambda r: r.get("date") or "", reverse=True)
+            sups = sorted(sup_by_theme.get(theme, []), key=lambda s: s.get("upd") or "", reverse=True)
+            sig = P.sha(json.dumps([[r["k"], r.get("page"), r["title"], [x["label"] for x in k_sub.get(r["k"], [])]]
+                                    for r in rs] + [[x.get("page"), x["label"], x.get("n"), bool(x.get("star"))]
+                                                    for x in sups], ensure_ascii=False))
+            tm = self.mem["themes"].setdefault(theme, {})
+            if tm.get("sig") == sig:
+                continue
+            blocks = self.render_theme(theme, rs, sups, k_sub)
+            for attempt in (0, 1):
+                try:
+                    put_blocks(self.n, self.theme_page(theme, check=bool(attempt)), tm, blocks)
+                    break
+                except RuntimeError:
+                    if attempt:
+                        raise
+                    tm.pop("container", None)
+            tm["sig"] = sig
+
+    def render_theme(self, theme, rs, sups, k_sub):
+        B, pr, lk = F.B, F.plain_rt, F.link_rt
+        fam = family_of(self.cfg, theme) or {}
+        col = fam.get("couleur", "default")
+        out = [F.callout(f"Dossier thématique « {theme} » — {len(rs)} rapport(s), {len(sups)} super fiche(s). "
+                         f"Mis à jour le {NOW:%d/%m/%Y}.", fam.get("icone") or "📂",
+                         (col + "_background") if col != "default" else "gray_background"),
+               B("paragraph", "🔷 Les super fiches réunissent les rapports qui portent sur le même sujet ou se "
+                              "complètent : grands enjeux, textes de loi en cours, éléments de langage, tableau de "
+                              "toutes les recommandations. 📑 Les fiches simples présentent un rapport.",
+                 color="gray", italic=True),
+               B("heading_2", "🔷 Super fiches")]
+        if sups:
+            for s in sups:
+                out.append(B("bulleted_list_item", "", [
+                    lk(("⭐ " if s.get("star") else "") + SUPER + s["label"][:200], notion_url(s["page"]), "blue", bold=True),
+                    pr(f" — {s.get('n') or len(s['members'])} rapports, mise à jour le "
+                       f"{F.fr_date((s.get('upd') or '')[:10])}", "gray")]))
+        else:
+            out.append(B("paragraph", "Aucune pour l'instant : une super fiche est créée dès que deux rapports portent "
+                                      "sur le même sujet ou se complètent.", color="gray"))
+        out.append(B("heading_2", f"📑 Fiches de rapport ({len(rs)})"))
+        for r in rs[:300]:
+            out.append(B("bulleted_list_item", "", [
+                pr(F.fr_date(r.get("date")) + " — ", "gray"), pr(org_short(r["organe"])[:80] + " : ", bold=True),
+                lk(r["title"][:220], notion_url(r.get("page")) or r["url"])] +
+                [pr("  · 🔷 " + s["label"][:80], "blue") for s in k_sub.get(r["k"], []) if s.get("page")][:2]))
+        return out
+
+    def prune(self):
+        """Supprime les données détaillées des rapports sortis de la mémoire."""
+        keep = {r.get("k") for r in self.st.get("done", [])}
+        folder = os.path.join(STATE_DIR, "fiches")
+        try:
+            for fn in os.listdir(folder):
+                if fn.endswith(".json") and fn[:-5] not in keep:
+                    os.remove(os.path.join(folder, fn))
+        except FileNotFoundError:
+            pass
+
+
+# =====================================================================
 # Mémoire
 # =====================================================================
 def load_state():
@@ -1020,7 +1936,7 @@ def load_state():
 
 
 def save_state(st):
-    os.makedirs(STATE_DIR, exist_ok=True)
+    os.makedirs(os.path.join(STATE_DIR, "fiches"), exist_ok=True)  # toujours présent (cache GitHub)
     cutoff = (NOW - dt.timedelta(days=500)).strftime("%Y-%m-%d")
     st["seen"] = {k: v for k, v in st["seen"].items() if v >= cutoff}
     st["queue"] = st["queue"][-500:]
@@ -1049,6 +1965,7 @@ def run(args):
     llm = make_llm(st)
     vp = L.Fetcher()
     R = Rapports(cfg, st, notion, llm, legi, vp, args.dry_run)
+    D = None
     try:
         R.collect()
         R.triage()
@@ -1056,14 +1973,21 @@ def run(args):
         if not args.dry_run:
             save_state(st)
         R.fiches()
+        D = Dossiers(R)
+        D.run()
         R.refresh()
     finally:
         vp.close()
         if not args.dry_run:
             save_state(st)
     c = R.counts
+    dc = D.counts if D else {"sujets": 0, "super": 0}
+    old = sum(1 for r in st.get("done", []) if r.get("v", 1) < FICHE_V)
     msg = (f"Terminé : {c['nouveaux']} nouveau(x) rapport(s), {c['ecartes']} écarté(s) (doublons, hors sujet ou "
-           f"portée locale), {c['fiches']} fiche(s) rédigée(s), {len(st['queue'])} en attente. Appels IA : {llm.calls}")
+           f"portée locale), {c['fiches']} fiche(s) rédigée(s) (dont {c.get('reprises', 0)} refaite(s)), "
+           f"{len(st['queue'])} en attente, {old} ancienne(s) fiche(s) à refaire. Super fiches : {dc['sujets']} "
+           f"nouveau(x) sujet(s), {dc['super']} super fiche(s) rédigée(s) ou mise(s) à jour "
+           f"({len(st.get('dossiers', {}).get('sujets', {}))} sujet(s) au total). Appels IA : {llm.calls}")
     log.info(msg)
     summ = V.env("GITHUB_STEP_SUMMARY")
     if summ:

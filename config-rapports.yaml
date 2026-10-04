@@ -24,28 +24,112 @@ fiches:
   taille_partie_caracteres: 100000   # ~35 pages par partie
   parties_max: 12                    # au-delà (~420 pages), les dernières parties (annexes) sont regroupées
   pause_entre_parties_secondes: 8
+  # Les fiches rédigées avant la version « éléments de langage + avantages/limites » sont refaites
+  # (une fois la file des nouveaux rapports vidée), pour alimenter les super fiches.
+  reprendre_anciennes_fiches: true
 
 liens_lois:
   mois_lois_promulguees: 24        # rattachement possible aux lois promulguées depuis moins de 24 mois
 
-# Thèmes (colonne « Thèmes ») : l'IA en choisit 1 à 5
-themes:
-  - {nom: "Finances publiques et dette", couleur: red}
-  - {nom: "Prélèvements obligatoires et fiscalité", couleur: red}
-  - {nom: "Protection sociale et retraites", couleur: blue}
-  - {nom: "Santé et assurance maladie", couleur: blue}
-  - {nom: "Famille et enfance", couleur: pink}
-  - {nom: "Handicap et autonomie", couleur: pink}
-  - {nom: "Pauvreté et exclusion", couleur: pink}
-  - {nom: "Logement et urbanisme", couleur: brown}
-  - {nom: "Travail et emploi", couleur: yellow}
-  - {nom: "Compétitivité et entreprises", couleur: yellow}
-  - {nom: "Commerce et concurrence", couleur: yellow}
-  - {nom: "Climat et énergie", couleur: green}
-  - {nom: "Environnement et agriculture", couleur: green}
-  - {nom: "Numérique et IA", couleur: purple}
-  - {nom: "Éducation, recherche et culture", couleur: purple}
-  - {nom: "Justice et sécurité", couleur: gray}
-  - {nom: "Institutions et administration", couleur: gray}
-  - {nom: "Collectivités territoriales", couleur: orange}
-  - {nom: "Défense et international", couleur: orange}
+# ---------------------------------------------------------------------
+# SUPER FICHES : quand plusieurs rapports portent sur le même sujet ou se complètent,
+# l'IA les réunit dans une « super fiche » 🔷, rangée dans le dossier thématique du sujet.
+# ---------------------------------------------------------------------
+super_fiches:
+  actif: true
+  super_fiches_par_passage: 2        # super fiches créées ou mises à jour à chaque passage
+  pause_secondes: 30
+  rapports_lus_max: 30               # rapports exploités pour la synthèse (les plus récents) ;
+                                     # le tableau reprend TOUTES les recommandations
+  regroupement_par_appel: 20         # nouveaux rapports examinés à la fois pour le regroupement par sujet
+
+# ---------------------------------------------------------------------
+# DOSSIERS THÉMATIQUES (sous-pages de « Veille administrative ») et colonne « Thèmes »
+# Familles reprises de la veille presse (Sécurité & défense, Politique & institutions,
+# Économie & ressources, Technologies & information, Environnement, Société) et enrichies
+# des grandes politiques publiques. L'IA choisit 1 à 5 thèmes par rapport.
+# Pas de virgule dans les noms de thèmes (contrainte de Notion).
+# ---------------------------------------------------------------------
+familles_thematiques:
+  - famille: Finances publiques et fiscalité
+    icone: "💶"
+    couleur: red
+    themes:
+      - Finances publiques et dette
+      - Prélèvements obligatoires et fiscalité
+      - Finances locales
+  - famille: Protection sociale et santé
+    icone: "🩺"
+    couleur: blue
+    themes:
+      - Protection sociale et retraites
+      - Santé et assurance maladie
+      - Hôpital et offre de soins
+      - Santé publique et prévention
+      - Handicap et autonomie
+  - famille: Société et solidarités
+    icone: "🤝"
+    couleur: pink
+    themes:
+      - Famille et enfance
+      - Pauvreté et exclusion
+      - Égalité et lutte contre les discriminations
+      - Migrations et intégration
+      - Jeunesse et sport
+  - famille: Économie, travail et entreprises
+    icone: "🏭"
+    couleur: yellow
+    themes:
+      - Conjoncture et macroéconomie
+      - Travail et emploi
+      - Formation professionnelle et apprentissage
+      - Compétitivité et entreprises
+      - Industrie et souveraineté économique
+      - Commerce et concurrence
+      - Agriculture et alimentation
+  - famille: Environnement, climat et énergie
+    icone: "🌿"
+    couleur: green
+    themes:
+      - Climat
+      - Énergie
+      - Biodiversité et ressources naturelles
+  - famille: Numérique et information
+    icone: "💻"
+    couleur: purple
+    themes:
+      - Numérique et IA
+      - Cybersécurité et données personnelles
+      - Médias et information
+  - famille: Éducation, recherche et culture
+    icone: "🎓"
+    couleur: default
+    themes:
+      - Éducation et enseignement scolaire
+      - Enseignement supérieur et recherche
+      - Culture et patrimoine
+  - famille: Territoires, logement et mobilités
+    icone: "🏘️"
+    couleur: brown
+    themes:
+      - Logement et urbanisme
+      - Collectivités territoriales
+      - Transports et mobilités
+      - Outre-mer
+      - Aménagement du territoire et ruralité
+  - famille: Institutions, justice et sécurité
+    icone: "⚖️"
+    couleur: gray
+    themes:
+      - Institutions et administration
+      - Fonction publique
+      - Justice
+      - Sécurité intérieure
+      - Droits et libertés
+  - famille: Europe, défense et international
+    icone: "🌍"
+    couleur: orange
+    themes:
+      - Union européenne
+      - Défense
+      - Action extérieure et aide au développement
