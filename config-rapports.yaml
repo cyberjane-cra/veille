@@ -13,11 +13,17 @@ limites:
 garder_rapports_locaux: false
 
 fiches:
-  fiches_par_passage: 6            # fiches très détaillées rédigées à chaque passage (passage toutes les heures)
+  fiches_par_passage: 5            # fiches très détaillées rédigées à chaque passage (passage toutes les heures)
   pause_entre_fiches_secondes: 30  # respecte la limite de volume par minute des modèles gratuits
   etoile_jours: 3                  # durée de l'⭐ « nouveau rapport »
   pages_pdf_max: 400               # pages lues dans le PDF du rapport
-  caracteres_envoyes_max: 90000    # texte du rapport envoyé à l'IA (début, recommandations, milieu, fin)
+  # Lecture intégrale : jusqu'à ce seuil (~90 pages), le rapport entier est envoyé à l'IA en une fois ;
+  # au-delà, il est lu partie par partie (notes de lecture détaillées), puis la fiche est rédigée
+  # à partir de toutes ces notes. Aucune partie du rapport n'est sautée.
+  lecture_integrale_max_caracteres: 250000
+  taille_partie_caracteres: 100000   # ~35 pages par partie
+  parties_max: 12                    # au-delà (~420 pages), les dernières parties (annexes) sont regroupées
+  pause_entre_parties_secondes: 8
 
 liens_lois:
   mois_lois_promulguees: 24        # rattachement possible aux lois promulguées depuis moins de 24 mois

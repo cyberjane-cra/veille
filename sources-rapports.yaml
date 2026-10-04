@@ -19,12 +19,14 @@
 - nom: Cour des comptes
   famille: Juridictions financières
   site: https://www.ccomptes.fr/fr
+  ssl_non_verifie: true   # site injoignable depuis GitHub au 1er diagnostic ; rapports aussi repris par vie-publique
   flux:
     - https://www.ccomptes.fr/rss/juridiction/98
 
 - nom: Conseil des prélèvements obligatoires (CPO)
   famille: Juridictions financières
   site: https://www.ccomptes.fr/fr
+  ssl_non_verifie: true
   flux:
     - https://www.ccomptes.fr/rss/juridiction/201
   pages:
@@ -33,6 +35,7 @@
 
 - nom: Haut Conseil des finances publiques (HCFP)
   famille: Juridictions financières
+  ssl_non_verifie: true
   pages:
     - url: https://www.hcfp.fr/liste-avis
       motif: 'hcfp\.fr/(?:liste-avis/[a-z0-9-]+|sites/default/files/.+\.pdf)'
@@ -72,12 +75,14 @@
 
 - nom: Haut Conseil du financement de la protection sociale (HCFiPS)
   famille: Hauts conseils et organes d'expertise
+  ssl_non_verifie: true
   pages:
     - url: https://www.securite-sociale.fr/hcfips
       motif: 'securite-sociale\.fr/home/hcfips/zone-main-content/rapports-et-avis-du-hcfips/[a-z0-9.-]+\.html'
 
 - nom: Haut Conseil pour l'avenir de l'assurance maladie (HCAAM)
   famille: Hauts conseils et organes d'expertise
+  ssl_non_verifie: true
   pages:
     - url: https://www.securite-sociale.fr/hcaam
       motif: 'securite-sociale\.fr/home/hcaam/zone-main-content/rapports-et-avis-1/[a-z0-9.-]+\.html'
@@ -118,7 +123,7 @@
 - nom: Conseil national des politiques de lutte contre la pauvreté (CNLE)
   famille: Hauts conseils et organes d'expertise
   pages:
-    - url: https://cnle.gouv.fr/les-rapports.html
+    - url: https://www.cnle.gouv.fr/les-rapports.html
       motif: 'cnle\.gouv\.fr/[a-z0-9-]{10,}\.html'
 
 - nom: Haut Conseil à l'égalité (HCE)
@@ -131,13 +136,11 @@
   famille: Hauts conseils et organes d'expertise
   pages:
     - url: https://www.conseil-ia-numerique.fr/
-      motif: 'conseil-ia-numerique\.fr/(?:travaux|publications|avis|rapports?)/[a-z0-9-]+'
 
 - nom: Conseil d'État (études)
   famille: Hauts conseils et organes d'expertise
   pages:
     - url: https://www.conseil-etat.fr/publications-colloques/etudes
-      motif: 'conseil-etat\.fr/publications-colloques/etudes/[a-z0-9-]+/[a-z0-9-]+'
 
 - nom: Haut Conseil de la santé publique (HCSP)
   famille: Hauts conseils et organes d'expertise
@@ -146,11 +149,12 @@
       motif: 'hcsp\.fr/explore\.cgi/avisrapportsdomaine\?clefr=\d+'
 
 # ---------------- Inspections générales ----------------
+# L'IGA et l'IGÉSR refusent les serveurs de GitHub (erreur 403) : leurs rapports publics
+# sont repris par vie-publique.fr (filet de sécurité), sans lecture directe de leur site.
 - nom: Inspection générale des finances (IGF)
   famille: Inspections générales
   pages:
     - url: https://www.igf.finances.gouv.fr/sites/igf/accueil/rapports-publics/nos-dernieres-publications.html
-      motif: 'igf\.finances\.gouv\.fr/.+(?:rapport|publications?)/.+'
 
 - nom: Inspection générale des affaires sociales (IGAS)
   famille: Inspections générales
@@ -163,18 +167,6 @@
   pages:
     - url: https://igedd.documentation.developpement-durable.gouv.fr/recherche
       motif: 'igedd\.documentation\.developpement-durable\.gouv\.fr/(?:notice|document)'
-
-- nom: Inspection générale de l'administration (IGA)
-  famille: Inspections générales
-  pages:
-    - url: https://www.interieur.gouv.fr/Publications/Rapports-de-l-IGA
-      motif: 'interieur\.gouv\.fr/Publications/Rapports-de-l-IGA/.+'
-
-- nom: Inspection générale de l'éducation, du sport et de la recherche (IGÉSR)
-  famille: Inspections générales
-  pages:
-    - url: https://www.education.gouv.fr/rapports-de-l-inspection-generale-de-l-education-du-sport-et-de-la-recherche-igesr-307394
-      motif: 'education\.gouv\.fr/[a-z0-9-]+-\d{5,}$'
 
 # ---------------- Autorités indépendantes ----------------
 - nom: Autorité de la concurrence
@@ -195,7 +187,8 @@
   famille: Autorités indépendantes
   pages:
     - url: https://www.defenseurdesdroits.fr/etudes-et-rapports-126
-      motif: 'defenseurdesdroits\.fr/[a-z0-9-]+-\d+$'
+      motif: '^https?://(?:www\.)?defenseurdesdroits\.fr/[a-z0-9-]+-\d+$'
+  exclure: '(linkedin|facebook|twitter|bsky|mailto|share)'
 
 - nom: Commission nationale consultative des droits de l'homme (CNCDH)
   famille: Autorités indépendantes

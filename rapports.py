@@ -465,7 +465,7 @@ class Rapports:
             first = not first_src.get(name)
             n = 0
             for it in items:
-                if not self.keep_title(src, it.get("title", "")):
+                if not self.keep_title(src, it.get("title", ""), it.get("url", "")):
                     continue
                 k = V.url_key(it["url"])
                 if k in st["seen"]:
@@ -484,6 +484,7 @@ class Rapports:
                 n += 1
             first_src[name] = True
             log.info("%-60s %3d nouveaux", name[:60], n)
+        self.fix_titles(new)
         new += self.collect_vie_publique()
         # doublons entre organes et vie-publique
         out = []
@@ -497,6 +498,38 @@ class Rapports:
         st["queue"].sort(key=lambda i: i.get("date") or "9999", reverse=True)
         self.counts["nouveaux"] = len(out)
         log.info("Rapports : %d nouveaux, %d en file d'attente", len(out), len(st["queue"]))
+
+    WEAK_TITLE = re.compile(r"^\W*$|^(?:consulter|en savoir plus|lire la suite|lire|télécharger|voir|accéder|"
+                            r"découvrir|le rapport|la note|l'avis)\b|^\d{2}-[A-Z]-\d{2}\b", re.I)
+
+    def fix_titles(self, items, maxn=40):
+        """Titres de liens peu parlants (« Consulter le rapport », vide…) : on lit le titre de la page."""
+        n = 0
+        for it in items:
+            t = (it.get("title") or "").strip()
+            t2 = re.sub(r"^(?:en savoir plus|lire la suite|consulter)\s*[:\-–]?\s*", "", t, flags=re.I)
+            if t2 != t and len(t2) >= 20:
+                it["title"] = t2
+                continue
+            if len(t) >= 25 and not self.WEAK_TITLE.search(t):
+                it["title"] = re.sub(r"\s+", " ", t)
+                continue
+            if n >= maxn:
+                continue
+            n += 1
+            r = V.http_get(it["url"], timeout=30)
+            if r is None or r.status_code >= 400 or "html" not in r.headers.get("content-type", "html"):
+                continue
+            soup = BeautifulSoup(r.text, "lxml")
+            cand = [soup.find("meta", property="og:title"), soup.find("h1"), soup.find("title")]
+            for c in cand:
+                v = (c.get("content") if c is not None and c.name == "meta" else (c.get_text(" ", strip=True)
+                                                                                   if c is not None else ""))
+                v = re.sub(r"\s+", " ", v or "").strip()
+                v = re.split(r"\s+[|–-]\s+(?=[^|–-]{0,60}$)", v)[0].strip() if len(v) > 40 else v
+                if len(v) >= 12 and not self.WEAK_TITLE.search(v):
+                    it["title"] = v[:400]
+                    break
 
     def collect_vie_publique(self):
         st, out = self.st, []
@@ -535,8 +568,10 @@ class Rapports:
         return (first[:90] or "Autre organe public"), "Autres organes publics"
 
     @staticmethod
-    def keep_title(src, title):
-        if src.get("titre_motif") and not re.search(src["titre_motif"], title or "", re.I):
+    def keep_title(src, title, url=""):
+        """Filtres de la source, appliqués au titre ET à l'adresse (ex. « rap-info » dans l'adresse)."""
+        hay = (title or "") + " " + (url or "")
+        if src.get("titre_motif") and not re.search(src["titre_motif"], hay, re.I):
             return False
         if src.get("titre_exclure") and re.search(src["titre_exclure"], title or "", re.I):
             return False
@@ -1022,7 +1057,7 @@ def diagnostic(args):
                                              {"limites": {"liens_max_par_page": 40}})
         except Exception as e:  # noqa: BLE001
             items, report = [], [f"erreur : {e}"]
-        kept = [i for i in items if Rapports.keep_title(src, i.get("title", ""))]
+        kept = [i for i in items if Rapports.keep_title(src, i.get("title", ""), i.get("url", ""))]
         dated = sorted([i for i in kept if i.get("date")], key=lambda i: i["date"], reverse=True)
         status = "✅" if kept else "⚠️"
         ok += bool(kept)
@@ -1031,8 +1066,8 @@ def diagnostic(args):
         out += [f"- {r}" for r in report]
         for i in (dated or kept)[:3]:
             out.append(f"  - {(i.get('date') or '')[:10]} {i.get('title', '')[:110]} — {i['url']}")
-        if kept and sample is None and src["nom"].startswith("Cour"):
-            sample = (dated or kept)[0]
+        if dated and sample is None and src["nom"] in ("Cour des comptes", "Sénat"):
+            sample = dated[0]
         out.append("")
     vp = L.Fetcher()
     try:
