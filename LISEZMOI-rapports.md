@@ -52,14 +52,13 @@ Un tri automatique écarte les simples actualités et les rapports de portée pu
 
 ## Installation (10 minutes)
 
-1. **Clé Gemini n° 3** (recommandé) : sur https://aistudio.google.com/apikey, cliquez sur « Create API key », puis « Create API key in new project ». Les fiches de rapport sont volumineuses : une clé dédiée évite d'entamer le quota des deux autres veilles.
+1. **Clé d'IA** : rien à faire, la veille utilise la clé Mistral commune aux trois veilles (secret `MISTRAL_API_KEY`). Ne créez pas de clé supplémentaire pour cumuler les quotas gratuits.
 2. **Page Notion** : créez une page **Veille administrative**. Avec **•••**, puis **Connexions**, ajoutez **Veille presse**. Copiez ensuite son lien.
 3. **GitHub** (dépôt `veille`) :
    - **Add file**, puis **Upload files** : déposez `rapports.py`, `config-rapports.yaml` et `sources-rapports.yaml`, puis **Commit changes** ;
    - **Add file**, puis **Create new file**, avec le nom `.github/workflows/rapports.yml` : collez le contenu de `workflow-rapports.yml`, puis **Commit changes**.
 4. **Secrets** (Settings, puis Secrets and variables, puis Actions) :
    - `NOTION_PAGE_ID_RAPPORTS` : le lien de la page « Veille administrative » ;
-   - `GEMINI_API_KEY_RAPPORTS` : la clé de l'étape 1 (facultatif).
 5. **Diagnostic** : onglet **Actions**, puis **Veille rapports publics**, puis **Run workflow** en mode **diagnostic**. Le rapport indique, organe par organe, ce qui a été trouvé : envoyez-le-moi pour que je corrige les organes qui ne répondent pas. Relancez ensuite en mode **normal**.
 
 Au premier passage, le programme reprend les rapports des 3 dernières semaines (`jours_premier_passage`). Ensuite, il ne traite que les nouveautés.
@@ -72,8 +71,8 @@ Au premier passage, le programme reprend les rapports des 3 dernières semaines 
 
 ## Réglages (`config-rapports.yaml`)
 
-- `fiches_par_passage` : fiches rédigées par passage horaire (5 par défaut).
-- `super_fiches_par_passage` : super fiches créées ou mises à jour par passage (2 par défaut).
+- `fiches_par_passage` : fiches rédigées par passage horaire (3 par défaut, rythme adapté à l'offre gratuite Mistral).
+- `super_fiches_par_passage` : super fiches créées ou mises à jour par passage (1 par défaut).
 - `jours_premier_passage` : profondeur du rattrapage au premier lancement.
 - `mois_lois_promulguees` : ancienneté maximale des lois auxquelles un rapport peut être rattaché.
 - `familles_thematiques` : familles et thèmes (dossiers Notion et colonne « Thèmes »), modifiables.

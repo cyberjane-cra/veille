@@ -1554,7 +1554,7 @@ class Dossiers:
             '"liens_lois": [{"code": "T1", "explication": "2 à 3 phrases", "recommandations": ["R3"]}], '
             '"a_suivre": ["échéances et suites annoncées par les rapports"]}',
             "Limites : 4 à 10 enjeux ; 10 à 25 chiffres clés.", ""]
-        budget = max(4000, 240000 // max(1, min(len(A), maxr)))
+        budget = max(4000, 150000 // max(1, min(len(A), maxr)))
         lines.append("=== RAPPORTS RÉUNIS ===")
         for i, (ac, d) in enumerate(A.items()):
             head = f"{ac} = {d['organe']} — {F.fr_date(d.get('date'))} — {d.get('type') or 'rapport'} — {d['title']}"
@@ -1570,10 +1570,10 @@ class Dossiers:
             lines.append("\n".join(parts)[:budget])
             lines.append("")
         lines.append("=== ÉLÉMENTS DE LANGAGE RELEVÉS MOT POUR MOT ===")
-        for code, ac, d, x in langs[:300]:
+        for code, ac, d, x in langs[:200]:
             lines.append(f"{code} [{ac}] « {str(x.get('formule', ''))[:300]} »")
         lines += ["", "=== RECOMMANDATIONS (texte exact) ==="]
-        for code, ac, d, r in recs[:450]:
+        for code, ac, d, r in recs[:350]:
             extra = "".join(f" | {lab} : {str(r.get(k))[:220]}" for k, lab in (("avantages", "avantages"),
                                                                                 ("limites", "limites")) if r.get(k))
             lines.append(f"{code} [{ac}, n° {r.get('num')}] {str(r.get('texte', ''))[:380]}{extra}")
@@ -1948,7 +1948,7 @@ def save_state(st):
 
 def make_llm(st):
     llm = V.LLM(st, {})
-    llm.gkey = V.env("GEMINI_API_KEY_RAPPORTS") or V.env("GEMINI_API_KEY_LEGI") or V.env("GEMINI_API_KEY")
+    # une seule clé pour les trois veilles (MISTRAL_API_KEY, sinon GEMINI_API_KEY) : lue par veille.LLM
     return llm
 
 
@@ -2018,7 +2018,7 @@ def diagnostic(args):
     llm = make_llm({})
     try:
         L.ask(llm, 'Réponds {"ok": true} en JSON.', "lite", 50)
-        out.append(f"- IA : OK ({'clé GEMINI_API_KEY_RAPPORTS' if V.env('GEMINI_API_KEY_RAPPORTS') else 'clé partagée'})")
+        out.append(f"- IA : OK ({llm.provider() if hasattr(llm, 'provider') else 'Gemini'})")
     except Exception as e:  # noqa: BLE001
         out.append(f"- IA : ÉCHEC — {e}")
     out += ["", "## Organes suivis", ""]

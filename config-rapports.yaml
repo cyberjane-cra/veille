@@ -13,7 +13,7 @@ limites:
 garder_rapports_locaux: false
 
 fiches:
-  fiches_par_passage: 5            # fiches très détaillées rédigées à chaque passage (passage toutes les heures)
+  fiches_par_passage: 3            # fiches très détaillées rédigées à chaque passage (rythme réduit : offre gratuite Mistral)
   pause_entre_fiches_secondes: 30  # respecte la limite de volume par minute des modèles gratuits
   etoile_jours: 3                  # durée de l'⭐ « nouveau rapport »
   pages_pdf_max: 400               # pages lues dans le PDF du rapport
@@ -37,7 +37,7 @@ liens_lois:
 # ---------------------------------------------------------------------
 super_fiches:
   actif: true
-  super_fiches_par_passage: 2        # super fiches créées ou mises à jour à chaque passage
+  super_fiches_par_passage: 1        # super fiches créées ou mises à jour à chaque passage
   pause_secondes: 30
   rapports_lus_max: 30               # rapports exploités pour la synthèse (les plus récents) ;
                                      # le tableau reprend TOUTES les recommandations
