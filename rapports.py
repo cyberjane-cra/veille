@@ -309,6 +309,34 @@ STYLE = (
 )
 
 
+def clean_ai(data, text_fields, list_fields):
+    """Les modèles renvoient parfois une liste là où un texte est attendu (ou l'inverse) : on normalise."""
+    if not isinstance(data, dict):
+        raise ValueError("réponse de l'IA illisible")
+    for k in text_fields:
+        v = data.get(k)
+        if isinstance(v, list):
+            data[k] = "\n\n".join(str(x) for x in v if x)
+        elif isinstance(v, dict):
+            data[k] = "\n\n".join(f"{a} : {b}" for a, b in v.items() if b)
+        elif v is not None and not isinstance(v, str):
+            data[k] = str(v)
+    for k in list_fields:
+        v = data.get(k)
+        if v is None or isinstance(v, list):
+            continue
+        data[k] = [v] if v else []
+    return data
+
+
+FICHE_TEXT = ("titre", "type", "commanditaire", "en_bref", "contexte", "perimetre_methode", "reponses")
+FICHE_LIST = ("chiffres_cles", "constats", "recommandations", "enjeux", "suites_legislatives", "liens_lois", "themes",
+              "a_suivre", "elements_de_langage", "notions_cles")
+SUPER_TEXT = ("presentation",)
+SUPER_LIST = ("enjeux", "convergences", "divergences", "chiffres_cles", "langage", "convergences_recos", "liens_lois",
+              "a_suivre")
+
+
 def vnorm(s):
     """Normalisation pour comparer une citation au texte (casse, accents, ponctuation, césures)."""
     s = P.norm(s)
@@ -922,13 +950,19 @@ class Rapports:
             mode = f"lu intégralement en {n_parts} parties"
         cands = self.legi.candidates(it["title"] + " " + body[:20000]) if self.legi.ok else []
         prompt = self.prompt(it, body, recs, cands, n_chars)
-        data = L.ask(self.llm, prompt, "flash", 32768)
-        if not isinstance(data, dict):
-            raise ValueError("fiche illisible")
+        data = clean_ai(L.ask(self.llm, prompt, "flash", 32768), FICHE_TEXT, FICHE_LIST)
         # éléments de langage : seules les formules retrouvées mot pour mot dans le rapport sont gardées
         ntext = vnorm(full + "\n" + (doc.get("synth_text") or "") + "\n" + (doc.get("html_text") or ""))
-        lang = [x for x in (data.get("elements_de_langage") or []) if isinstance(x, dict)
-                and verbatim_ok(str(x.get("formule", "")), ntext)]
+        props_l = []
+        for x in data.get("elements_de_langage") or []:
+            if isinstance(x, str):
+                x = {"formule": x, "sens": ""}
+            if isinstance(x, dict):
+                for k in ("formule", "sens"):
+                    v = x.get(k)
+                    x[k] = " ".join(map(str, v)) if isinstance(v, list) else str(v or "")
+                props_l.append(x)
+        lang = [x for x in props_l if verbatim_ok(x["formule"], ntext)]
         log.info("  éléments de langage : %d retrouvés mot pour mot sur %d proposés", len(lang),
                  len(data.get("elements_de_langage") or []))
         data["elements_de_langage"] = lang[:30]
@@ -1484,9 +1518,10 @@ class Dossiers:
                 if did not in cand:
                     cand.append(did)
         cand = cand[:20]
-        data = L.ask(self.llm, self.super_prompt(s, A, recs, langs, cand), "flash", 32768)
-        if not isinstance(data, dict):
-            raise ValueError("super fiche illisible")
+        data = clean_ai(L.ask(self.llm, self.super_prompt(s, A, recs, langs, cand), "flash", 32768),
+                        SUPER_TEXT, SUPER_LIST)
+        if not isinstance(data.get("classement"), dict):
+            data["classement"] = {}
         themes = sorted({t for d in ds for t in d.get("themes") or []})
         theme = s.get("theme") or self.main_theme(ds)
         blocks = self.render_super(s, data, A, recs, langs, cand)
