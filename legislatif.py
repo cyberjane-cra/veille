@@ -245,7 +245,7 @@ def save_state(st):
 # =====================================================================
 def make_llm(st, cfg):
     llm = V.LLM(st, {})
-    llm.gkey = V.env("GEMINI_API_KEY_LEGI") or V.env("GEMINI_API_KEY")
+    # une seule clé pour les trois veilles (MISTRAL_API_KEY, sinon GEMINI_API_KEY) : lue par veille.LLM
     return llm
 
 
@@ -261,12 +261,12 @@ def ask(llm, prompt, quality="lite", max_tokens=8192):
         try:
             return llm._call_gemini(model, prompt, max_tokens)
         except V.QuotaExhausted as e:
-            log.info("Gemini %s : quota du jour épuisé (%s)", model, str(e)[:100])
+            log.info("IA %s : quota épuisé (%s)", model, str(e)[:100])
             llm.exhausted[model] = llm.today
         except (ValueError, KeyError) as e:
-            log.warning("Gemini %s : réponse illisible (%s)", model, e)
+            log.warning("IA %s : réponse illisible (%s)", model, e)
         except (RuntimeError, requests.RequestException) as e:
-            log.warning("Gemini %s indisponible : %s", model, str(e)[:200])
+            log.warning("IA %s indisponible : %s", model, str(e)[:200])
             llm.skip.add(model)
     if quality == "lite":
         for model in llm.groq_models():
@@ -1455,8 +1455,8 @@ def diagnostic(args):
         out.append("## IA et Notion")
         st = load_state()
         llm = make_llm({}, cfg)
-        out.append(f"- Gemini : {'clé GEMINI_API_KEY_LEGI' if V.env('GEMINI_API_KEY_LEGI') else 'clé GEMINI_API_KEY (partagée avec la veille presse)'}"
-                   f" — modèles : {', '.join(llm.gemini_models()) or 'aucun'}")
+        out.append(f"- IA : {llm.provider() if hasattr(llm, 'provider') else 'Gemini'}"
+                   f" — modèles : {', '.join(m.split('~')[0] for m in llm.gemini_models()) or 'aucun'}")
         try:
             res = ask(llm, 'Réponds {"ok": true} en JSON.', "lite", 50)
             out.append(f"- Test IA : OK ({res})")

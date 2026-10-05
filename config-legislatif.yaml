@@ -22,7 +22,7 @@ limites:
   seuil_rattachement: 6.0            # proximité de vocabulaire minimale pour proposer un texte à l'IA
 
 fiches:
-  fiches_par_passage: 15             # fiches rédigées ou enrichies par l'IA à chaque passage
+  fiches_par_passage: 8              # fiches rédigées ou enrichies par l'IA à chaque passage (rythme réduit : offre gratuite Mistral)
   pause_entre_fiches_secondes: 20    # respecte la limite de volume par minute des modèles gratuits
   jours_entre_mises_a_jour: 2        # délai minimal entre deux enrichissements (sauf nouvelle étape : immédiat)
   etoile_jours: 3                    # durée de l'⭐ et de l'alerte sur la ligne du tableau de bord
