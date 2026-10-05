@@ -59,9 +59,8 @@ jobs:
 
       - name: Veille des rapports publics
         env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_API_KEY_LEGI: ${{ secrets.GEMINI_API_KEY_LEGI }}
-          GEMINI_API_KEY_RAPPORTS: ${{ secrets.GEMINI_API_KEY_RAPPORTS }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_PAGE_ID_RAPPORTS: ${{ secrets.NOTION_PAGE_ID_RAPPORTS }}
