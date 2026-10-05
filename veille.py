@@ -706,7 +706,7 @@ def _groq_transcribe_file(path, lang, key):
 
 
 # =====================================================================
-# IA : synthèse + classement (Gemini gratuit, repli Groq gratuit)
+# IA : synthèse + classement (Mistral ou Gemini, repli Groq)
 # =====================================================================
 BAD_MODEL_WORDS = ("image", "tts", "audio", "live", "embedding", "native", "exp", "computer", "robotics",
                    "veo", "imagen", "aqa", "learnlm", "lyria", "vision", "nano", "e2b", "e4b", "1b")
@@ -725,6 +725,8 @@ class LLM:
         self.cfg = cfg
         self.gkey = env("GEMINI_API_KEY")
         self.qkey = env("GROQ_API_KEY")
+        self.mkey = env("MISTRAL_API_KEY")  # si présente, Mistral remplace Gemini (une seule clé pour les 3 veilles)
+        self._m_last = 0.0
         today = NOW.strftime("%Y-%m-%d")
         ex = state.setdefault("exhausted", {})
         if not state.get("quota_fix_v1"):  # une ancienne version marquait à tort des modèles comme épuisés
@@ -742,6 +744,12 @@ class LLM:
     # ----- liste des modèles -----
     def gemini_models(self):
         if self._gemini is not None:
+            return self._gemini
+        if self.mkey:
+            # Deux modèles fixes, un par usage (pas de changement de modèle pour contourner une limite) :
+            # « léger » pour le tri, les notes et les résumés d'articles ; « principal » pour les fiches.
+            self._gemini = [env("MISTRAL_MODELE_LEGER", "mistral-small-latest") + "~lite",
+                            env("MISTRAL_MODELE", "mistral-large-latest")]
             return self._gemini
         forced = env("GEMINI_MODELS")
         if forced:
@@ -766,8 +774,9 @@ class LLM:
                 log.warning("Liste des modèles Gemini indisponible : %s", e)
         lite = sorted([m for m in models if "lite" in m and "gemma" not in m], key=_version_key, reverse=True)
         flash = sorted([m for m in models if "lite" not in m and "gemma" not in m], key=_version_key, reverse=True)
-        gemma = sorted([m for m in models if "gemma" in m], key=_version_key, reverse=True)[:2]
-        self._gemini = lite + flash + gemma
+        # Un seul modèle par usage (le plus récent « lite » et le plus récent « flash ») : pas d'enchaînement
+        # de modèles pour cumuler les quotas gratuits.
+        self._gemini = lite[:1] + flash[:1]
         return self._gemini
 
     def groq_models(self):
@@ -838,12 +847,12 @@ class LLM:
                 out = self._call_gemini(model, prompt)
                 return self._index(out)
             except QuotaExhausted as e:
-                log.info("Gemini %s : quota du jour épuisé (%s) → modèle suivant", model, str(e)[:120])
+                log.info("IA %s : quota épuisé (%s) → modèle suivant", model, str(e)[:120])
                 self.exhausted[model] = self.today
             except (ValueError, KeyError) as e:
-                log.warning("Gemini %s : réponse illisible (%s)", model, e)
+                log.warning("IA %s : réponse illisible (%s)", model, e)
             except (RuntimeError, requests.RequestException) as e:
-                log.warning("Gemini %s indisponible : %s", model, str(e)[:200])
+                log.warning("IA %s indisponible : %s", model, str(e)[:200])
                 self.skip.add(model)
         # Repli Groq : un document à la fois (limite de 8 000 jetons/minute)
         results = {}
@@ -884,12 +893,12 @@ class LLM:
             try:
                 return self._call_gemini(model, prompt, max_tokens)
             except QuotaExhausted as e:
-                log.info("Gemini %s : quota du jour épuisé (%s) → modèle suivant", model, str(e)[:120])
+                log.info("IA %s : quota épuisé (%s) → modèle suivant", model, str(e)[:120])
                 self.exhausted[model] = self.today
             except (ValueError, KeyError) as e:
-                log.warning("Gemini %s : réponse illisible (%s)", model, e)
+                log.warning("IA %s : réponse illisible (%s)", model, e)
             except (RuntimeError, requests.RequestException) as e:
-                log.warning("Gemini %s indisponible : %s", model, str(e)[:200])
+                log.warning("IA %s indisponible : %s", model, str(e)[:200])
                 self.skip.add(model)
         raise QuotaExhausted("aucun modèle Gemini disponible pour les fiches")
 
@@ -902,7 +911,16 @@ class LLM:
             raise ValueError("format inattendu")
         return {str(d.get("id")): d for d in docs if isinstance(d, dict)}
 
+    def provider(self):
+        return "Mistral" if self.mkey else "Gemini"
+
+    @staticmethod
+    def is_mistral(model):
+        return model.endswith("~lite") or "istral" in model
+
     def _call_gemini(self, model, prompt, max_tokens=8192):
+        if self.is_mistral(model):
+            return self._call_mistral(model, prompt, max_tokens)
         body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
                 "generationConfig": {"temperature": 0.2, "maxOutputTokens": max_tokens}}
         if "gemma" not in model:
@@ -929,6 +947,8 @@ class LLM:
             last = f"HTTP {r.status_code} {msg[:200]}"
             if r.status_code == 429:
                 if re.search(r"PerDay|per day|limit: 0\b|\"limit\": 0", msg, re.I):
+                    for m in self.gemini_models():  # quota du jour atteint : plus d'appel Gemini aujourd'hui
+                        self.exhausted[m] = self.today
                     raise QuotaExhausted(msg[:300])
                 m = re.search(r'"retryDelay":\s*"(\d+)', msg)
                 wait = int(m.group(1)) if m else 30
@@ -946,8 +966,69 @@ class LLM:
                 del body["generationConfig"]["responseMimeType"]
                 continue
             raise RuntimeError(f"HTTP {r.status_code} {msg[:300]}")
-        # Refus répétés (limite par minute, serveur surchargé) : modèle mis de côté pour ce passage seulement
+        # Refus répétés (limite par minute, serveur surchargé) : l'IA Gemini est mise de côté pour ce passage
+        if "HTTP 429" in last:
+            self.skip.update(self.gemini_models())
         raise RuntimeError(f"temporairement indisponible ({last})")
+
+    def _call_mistral(self, model, prompt, max_tokens=8192):
+        """Mistral (offre gratuite « Experiment ») : environ 1 requête par seconde. Le programme respecte
+        ce rythme et, en cas de refus, ATTEND le délai indiqué ; si la limite persiste, il arrête l'IA
+        Mistral pour ce passage (aucun autre modèle n'est essayé pour la contourner)."""
+        name = model.split("~")[0]
+        body = {"model": name, "temperature": 0.2, "max_tokens": min(int(max_tokens), 32000),
+                "messages": [{"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
+        interval = float(env("MISTRAL_INTERVALLE_SECONDES", "2"))
+        waited, last = 0.0, ""
+        for attempt in range(8):
+            gap = interval - (time.time() - self._m_last)
+            if gap > 0:
+                time.sleep(gap)
+            self._m_last = time.time()
+            r = requests.post("https://api.mistral.ai/v1/chat/completions", json=body,
+                              headers={"Authorization": f"Bearer {self.mkey}"}, timeout=600)
+            self.calls[name] = self.calls.get(name, 0) + 1
+            if r.status_code == 200:
+                ch = (r.json().get("choices") or [{}])[0]
+                content = (ch.get("message") or {}).get("content") or ""
+                if isinstance(content, list):  # réponse en morceaux (modèles « raisonnants »)
+                    content = "".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
+                if not content:
+                    raise ValueError(f"réponse vide ({ch.get('finish_reason')})")
+                return parse_json(content)
+            msg = r.text
+            last = f"HTTP {r.status_code} {msg[:200]}"
+            if r.status_code == 429:
+                if re.search(r"month|monthly|mensuel", msg, re.I):
+                    for m in self.gemini_models():  # quota mensuel atteint : plus d'appel Mistral aujourd'hui
+                        self.exhausted[m] = self.today
+                    raise QuotaExhausted("Mistral : quota mensuel de l'offre gratuite atteint")
+                try:
+                    wait = float(r.headers.get("retry-after") or 0)
+                except ValueError:
+                    wait = 0
+                wait = wait or min(60.0, 5.0 * 2 ** attempt)
+                waited += wait
+                if waited > 300:
+                    break
+                log.info("Mistral : limite de débit atteinte, attente de %.0f s", wait)
+                time.sleep(wait)
+                continue
+            if r.status_code in (500, 502, 503, 504):
+                time.sleep(20)
+                continue
+            if r.status_code == 400 and "response_format" in body and "response_format" in msg:
+                del body["response_format"]
+                continue
+            if r.status_code == 400 and "max_tokens" in msg and body["max_tokens"] > 8192:
+                body["max_tokens"] = 8192
+                continue
+            if r.status_code in (401, 403):
+                raise RuntimeError(f"clé Mistral refusée (HTTP {r.status_code}) : vérifiez le secret MISTRAL_API_KEY")
+            raise RuntimeError(f"HTTP {r.status_code} {msg[:300]}")
+        # Limite persistante : l'IA Mistral est mise de côté jusqu'au prochain passage
+        self.skip.update(m for m in self.gemini_models() if self.is_mistral(m))
+        raise RuntimeError(f"Mistral : limite de débit persistante, reprise au prochain passage ({last})")
 
     def _call_groq(self, model, prompt):
         body = {"model": model, "temperature": 0.2, "max_completion_tokens": 2500,
@@ -1677,11 +1758,11 @@ def diagnostic(args):
 
     out.append("## Clés et services")
     llm = LLM({}, cfg)
-    out.append(f"- Gemini : {'clé présente' if llm.gkey else 'CLÉ MANQUANTE'} — modèles utilisables : "
-               f"{', '.join(llm.gemini_models()) or 'aucun'}")
+    out.append(f"- IA principale : {llm.provider()} ({'clé présente' if (llm.mkey or llm.gkey) else 'CLÉ MANQUANTE'})"
+               f" — modèles : {', '.join(m.split('~')[0] for m in llm.gemini_models()) or 'aucun'}")
     out.append(f"- Groq : {'clé présente' if llm.qkey else 'CLÉ MANQUANTE'} — modèles : "
                f"{', '.join(llm.groq_models()) or 'aucun'}")
-    if llm.gkey or llm.qkey:
+    if llm.mkey or llm.gkey or llm.qkey:
         try:
             res = llm.summarize([{"id": "1", "source": "Test", "title": "Test", "date": None, "url": "https://example.org",
                                   "text": "La Commission européenne a présenté un plan de 800 milliards d'euros pour "

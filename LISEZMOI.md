@@ -12,8 +12,8 @@ Tout fonctionne **gratuitement**, dans le cloud de GitHub, **même quand votre M
 | Brique | Service gratuit | Rôle |
 |---|---|---|
 | Automatisation | GitHub Actions (dépôt privé) | lance le programme toutes les 3 h |
-| Synthèse et classement | Google Gemini (AI Studio) | IA principale : le programme prend automatiquement les modèles gratuits disponibles |
-| Transcription et IA de secours | Groq | transcription audio (Whisper), puis relais si le quota Gemini du jour est épuisé |
+| Synthèse et classement | Mistral AI (offre gratuite « Experiment ») | IA principale, commune aux trois veilles : une seule clé, deux modèles fixes (léger pour les résumés, principal pour les fiches) |
+| Transcription et IA de secours | Groq | transcription audio (Whisper), et relais pour les petites tâches si Mistral est momentanément indisponible |
 | Lecture des pages en JavaScript | Jina Reader | lecture de secours, sans compte |
 | Résultat | Notion | votre flux de veille classé |
 
@@ -21,11 +21,13 @@ Comptez environ **20 minutes** pour l'installation, en une seule fois.
 
 ---
 
-## Étape 1 : la clé Google Gemini (2 min)
+## Étape 1 : la clé Mistral (5 min)
 
-1. Allez sur **https://aistudio.google.com/apikey** et connectez-vous avec un compte Google.
-2. Cliquez sur **« Create API key »** (ou « Créer une clé API »). Acceptez la création d'un projet si on vous le propose.
-3. Copiez la clé (elle commence par `AIza…`) et gardez-la de côté.
+1. Allez sur **https://console.mistral.ai** et créez un compte (adresse e-mail, puis vérification par SMS).
+2. Choisissez l'offre gratuite **Experiment** et acceptez les conditions d'utilisation.
+3. Menu **API Keys**, puis **Create new key** : copiez la clé et gardez-la de côté.
+
+> **Une seule clé pour les trois veilles.** Ne créez pas plusieurs comptes ni plusieurs clés pour cumuler les quotas gratuits : c'est contraire aux conditions des fournisseurs. Le programme respecte le rythme autorisé et attend quand une limite est atteinte.
 
 > N'ajoutez **pas** de moyen de paiement : sans carte, vous restez sur l'offre gratuite et rien ne peut vous être facturé.
 > Sur l'offre gratuite, Google peut utiliser les textes envoyés pour améliorer ses modèles. Ce n'est pas gênant ici, car il s'agit de publications publiques.
@@ -62,7 +64,7 @@ Comptez environ **20 minutes** pour l'installation, en une seule fois.
 
 | Nom du secret | Valeur |
 |---|---|
-| `GEMINI_API_KEY` | la clé de l'étape 1 |
+| `MISTRAL_API_KEY` | la clé de l'étape 1 |
 | `GROQ_API_KEY` | la clé de l'étape 2 |
 | `NOTION_TOKEN` | le secret d'intégration de l'étape 3 |
 | `NOTION_PAGE_ID` | l'identifiant (ou le lien) de la page « Veille » |
@@ -74,7 +76,7 @@ Les secrets sont chiffrés : personne, même vous, ne peut les relire ensuite.
 1. Ouvrez l'onglet **Actions** du dépôt et activez les workflows si GitHub vous le demande.
 2. Cliquez sur **Veille presse** (à gauche), puis **Run workflow**. Choisissez le mode **diagnostic** et cliquez sur **Run workflow**.
 3. Après 5 à 10 minutes, cliquez sur l'exécution terminée. Le **rapport de diagnostic** s'affiche en bas de la page (« Summary ») :
-   - il vérifie les clés Gemini, Groq et Notion, et crée la base Notion ;
+   - il vérifie les clés Mistral, Groq et Notion, et crée la base Notion ;
    - il teste chaque source : flux RSS trouvés, liens lus, et un test de lecture intégrale.
    **Envoyez-moi ce rapport** (copier-coller) : je corrigerai les sources qui ne fonctionnent pas.
 4. Relancez ensuite **Run workflow** en mode **normal**. C'est le premier vrai passage : il ne traite que les publications des 2 derniers jours, pour ne pas crouler sous l'historique.
@@ -108,7 +110,7 @@ Vues conseillées, à créer dans Notion avec **+ Ajouter une vue** :
 
 - Les articles sont **envoyés à l'IA par groupes de 4**, ce qui fait 4 fois moins de requêtes.
 - Le texte envoyé est limité à environ 16 000 caractères par article (le début et la conclusion). C'est suffisant pour une bonne synthèse et ça économise le quota.
-- **Enchaînement des modèles** : quand le quota gratuit d'un modèle Gemini est épuisé pour la journée, le programme passe au modèle Gemini suivant (chacun a son propre quota), puis aux modèles Groq.
+- **Respect des limites** : le programme espace ses requêtes (une toutes les 2 secondes) et, en cas de refus pour dépassement, attend le délai indiqué. Si la limite persiste, il s'arrête et reprend au passage suivant ; il ne change pas de modèle pour la contourner.
 - **File d'attente** : si tous les quotas sont épuisés, les articles restants attendent le passage suivant. Rien n'est perdu, même quand un article disparaît du flux RSS entre-temps.
 - **Pas de doublons** : un article déjà présent dans Notion n'est jamais retraité.
 
