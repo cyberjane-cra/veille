@@ -988,8 +988,14 @@ class LLM:
             if gap > 0:
                 time.sleep(gap)
             self._m_last = time.time()
-            r = requests.post("https://api.mistral.ai/v1/chat/completions", json=body,
-                              headers={"Authorization": f"Bearer {self.mkey}"}, timeout=600)
+            try:
+                r = requests.post("https://api.mistral.ai/v1/chat/completions", json=body,
+                                  headers={"Authorization": f"Bearer {self.mkey}"}, timeout=600)
+            except requests.RequestException as e:  # coupure réseau passagère : on réessaie le même modèle
+                last = f"réseau : {e}"
+                log.info("Mistral : connexion interrompue (%s), nouvel essai dans 20 s", str(e)[:120])
+                time.sleep(20)
+                continue
             self.calls[name] = self.calls.get(name, 0) + 1
             if r.status_code == 200:
                 ch = (r.json().get("choices") or [{}])[0]
@@ -1026,8 +1032,11 @@ class LLM:
             if r.status_code == 400 and "max_tokens" in msg and body["max_tokens"] > 8192:
                 body["max_tokens"] = 8192
                 continue
-            if r.status_code in (401, 403):
-                raise RuntimeError(f"clé Mistral refusée (HTTP {r.status_code}) : vérifiez le secret MISTRAL_API_KEY")
+            if r.status_code == 401:
+                raise RuntimeError(f"clé Mistral refusée (HTTP 401) : vérifiez le secret MISTRAL_API_KEY ({msg[:200]})")
+            if r.status_code == 403:
+                # modèle non ouvert à l'offre de ce compte : l'autre modèle Mistral prend le relais
+                raise RuntimeError(f"accès refusé au modèle {name} (HTTP 403) : {msg[:300]}")
             raise RuntimeError(f"HTTP {r.status_code} {msg[:300]}")
         # Limite persistante : l'IA Mistral est mise de côté jusqu'au prochain passage
         self.skip.update(m for m in self.gemini_models() if self.is_mistral(m))
