@@ -748,8 +748,11 @@ class LLM:
         if self.mkey:
             # Deux modèles fixes, un par usage (pas de changement de modèle pour contourner une limite) :
             # « léger » pour le tri, les notes et les résumés d'articles ; « principal » pour les fiches.
-            self._gemini = [env("MISTRAL_MODELE_LEGER", "mistral-small-latest") + "~lite",
-                            env("MISTRAL_MODELE", "mistral-large-latest")]
+            # Noms exacts des modèles ouverts à l'offre gratuite (rubrique « Limites » de la console Mistral) :
+            # les alias « …-latest » peuvent désigner une version plus récente, non ouverte à cette offre.
+            # Principal : mistral-large-2512 (250 000 jetons/min) ; léger : ministral-14b-2512 (937 500 jetons/min).
+            self._gemini = [env("MISTRAL_MODELE_LEGER", "ministral-14b-2512") + "~lite",
+                            env("MISTRAL_MODELE", "mistral-large-2512")]
             return self._gemini
         forced = env("GEMINI_MODELS")
         if forced:
