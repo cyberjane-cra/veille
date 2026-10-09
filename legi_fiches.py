@@ -412,16 +412,59 @@ def write(notion, page_id, t, blocks):
     return container
 
 
+def as_text(v):
+    """Texte attendu : les modèles renvoient parfois une liste ou un objet à la place."""
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, list):
+        return "\n\n".join(as_text(x) for x in v if x)
+    if isinstance(v, dict):
+        return " ; ".join(f"{k} : {as_text(x)}" for k, x in v.items() if x)
+    return str(v)
+
+
 def clean_data(data, level):
-    """Contrôle léger de la réponse de l'IA."""
+    """Contrôle de la réponse de l'IA : chaque champ reçoit le type attendu (texte, liste, objet)."""
     if not isinstance(data, dict):
         raise ValueError("fiche illisible")
     for k in ("mesures", "vecteurs", "debats", "navette", "objectifs", "a_suivre"):
         v = data.get(k)
         if v is not None and not isinstance(v, list):
-            data[k] = [v]
+            data[k] = [v] if v else []
     for k in ("identite", "incidences", "application"):
         if data.get(k) is not None and not isinstance(data.get(k), dict):
             data[k] = {}
-    data["intitule_court"] = str(data.get("intitule_court") or "")[:120]
+    for k in ("en_bref", "contexte", "constitutionnalite"):
+        if data.get(k) is not None:
+            data[k] = as_text(data[k])
+    for k in ("objectifs", "a_suivre"):
+        if data.get(k):
+            data[k] = [as_text(x) for x in data[k] if x]
+    shapes = {"mesures": ("contenu", ("titre", "contenu", "statut")), "debats": ("positions", ("sujet", "positions")),
+              "navette": ("etape", ("date", "etape", "apport")), "vecteurs": ("texte", ("texte",))}
+    for k, (main, fields) in shapes.items():
+        items = []
+        for x in data.get(k) or []:
+            if not isinstance(x, dict):
+                x = {main: as_text(x)}
+            for f in fields:
+                x[f] = as_text(x.get(f))
+            if not isinstance(x.get("refs"), list):
+                x["refs"] = [x["refs"]] if x.get("refs") else []
+            items.append(x)
+        if k in data:
+            data[k] = items
+    idt = data.get("identite")
+    if isinstance(idt, dict):
+        for f, v in list(idt.items()):
+            if f == "textes_modifies":
+                idt[f] = [as_text(x) for x in v] if isinstance(v, list) else ([as_text(v)] if v else [])
+            else:
+                idt[f] = as_text(v)
+    for k in ("incidences", "application"):
+        if isinstance(data.get(k), dict):
+            data[k] = {f: as_text(v) for f, v in data[k].items()}
+    data["intitule_court"] = as_text(data.get("intitule_court"))[:120]
     return data

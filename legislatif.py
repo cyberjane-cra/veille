@@ -255,6 +255,7 @@ def ask(llm, prompt, quality="lite", max_tokens=8192):
     flash = [m for m in models if "lite" not in m and "gemma" not in m]
     gemma = [m for m in models if "gemma" in m]
     order = (lite + flash + gemma) if quality == "lite" else (flash + lite)
+    unreadable = None
     for model in order:
         if model in llm.exhausted or model in llm.skip:
             continue
@@ -265,6 +266,7 @@ def ask(llm, prompt, quality="lite", max_tokens=8192):
             llm.exhausted[model] = llm.today
         except (ValueError, KeyError) as e:
             log.warning("IA %s : réponse illisible (%s)", model, e)
+            unreadable = e
         except (RuntimeError, requests.RequestException) as e:
             log.warning("IA %s indisponible : %s", model, str(e)[:200])
             llm.skip.add(model)
@@ -280,6 +282,9 @@ def ask(llm, prompt, quality="lite", max_tokens=8192):
             except (ValueError, KeyError, RuntimeError, requests.RequestException) as e:
                 log.warning("Groq %s : %s", model, str(e)[:200])
                 llm.skip.add(key)
+    if unreadable is not None:
+        # l'IA a répondu, mais de façon inexploitable : échec de cet élément seulement, le passage continue
+        raise ValueError(f"réponse de l'IA inexploitable ({unreadable})")
     raise V.QuotaExhausted("aucun modèle d'IA gratuit disponible pour le moment")
 
 
@@ -970,8 +975,10 @@ class Legi:
                 if not pert:
                     continue
                 codes = {f"T{n + 1}": did for n, did in enumerate(it["cands"])}
-                linked = [codes[c] for c in (r.get("textes") or []) if c in codes]
-                self.fil_add_now(dict(it, resume=r.get("resume") or it["text"][:600], textes=linked))
+                tx = r.get("textes") or []
+                tx = tx if isinstance(tx, list) else [tx]
+                linked = [codes[c] for c in tx if isinstance(c, str) and c in codes]
+                self.fil_add_now(dict(it, resume=F.as_text(r.get("resume")) or it["text"][:600], textes=linked))
         self.st["fil_queue"] = [{k: v for k, v in i.items() if k not in ("text", "cands")}
                                 for i in queue if i["key"] not in done]
 
@@ -1025,6 +1032,17 @@ class Legi:
             if time_left(self.cfg) < 240:
                 remaining.append(it)
                 continue
+            # éléments mis en file par une version précédente : types corrigés (résumé reçu sous forme d'objet…)
+            it["resume"] = F.as_text(it.get("resume"))
+            it["title"] = F.as_text(it.get("title"))
+            if not isinstance(it.get("textes"), list):
+                it["textes"] = []
+            existing = self.fil_existing(db, it["url"])
+            if existing:  # déjà publié (passage interrompu avant l'enregistrement de la mémoire)
+                self.st["fil"].append({"i": it["key"], "rub": RUBRIQUES[it["rub"]][0], "t": it["title"][:300],
+                                       "d": (it.get("date") or "")[:10], "u": it["url"],
+                                       "r": it["resume"][:1500], "x": it.get("textes", []), "p": existing})
+                continue
             rel = [{"id": self.st["textes"][d]["page"]} for d in it.get("textes", [])
                    if d in self.st["textes"] and self.st["textes"][d].get("page")]
             props = {
@@ -1046,7 +1064,7 @@ class Legi:
                 props["Fin de consultation"] = {"date": {"start": it["fin"][:10]}}
             try:
                 page = self.notion.create_page(db, props)
-            except RuntimeError as e:
+            except Exception as e:  # noqa: BLE001 — un élément en échec ne doit pas arrêter le passage
                 log.warning("Fil : échec Notion pour %s : %s", it["url"], e)
                 it["tries"] = it.get("tries", 0) + 1
                 if it["tries"] < 3:
@@ -1061,6 +1079,25 @@ class Legi:
                 if d in self.st["textes"]:
                     self.st["textes"][d]["fiche_dirty"] = True
         self.st["pending"] = remaining
+
+    def fil_existing(self, db, url):
+        """Page du fil déjà créée pour cette adresse ? Les doublons éventuels sont mis à la corbeille Notion
+        (récupérables 30 jours) ; la plus ancienne est gardée."""
+        try:
+            res = self.notion.req("POST", f"/databases/{db}/query", {
+                "filter": {"property": "Lien", "url": {"equals": url}},
+                "sorts": [{"timestamp": "created_time", "direction": "ascending"}], "page_size": 20})
+        except RuntimeError as e:
+            log.debug("Fil : recherche de doublon impossible : %s", e)
+            return None
+        pages = [p for p in res.get("results", []) if not p.get("archived") and not p.get("in_trash")]
+        for extra in pages[1:]:
+            try:
+                self.notion.req("PATCH", f"/pages/{extra['id']}", {"archived": True})
+                log.info("Fil : doublon mis à la corbeille Notion (%s)", url)
+            except RuntimeError as e:
+                log.debug("Doublon non retiré : %s", e)
+        return pages[0]["id"] if pages else None
 
     def fix_fil_types(self):
         """Une fois : harmonise la colonne « Type » des éléments du fil déjà publiés."""
