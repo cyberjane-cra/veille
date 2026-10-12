@@ -140,6 +140,7 @@ limites:
   age_max_jours: 95               # on ignore les publications datées de plus de N jours
   liens_max_par_page: 40          # pour les sites sans RSS : nb de liens examinés par page
   duree_max_minutes: 40           # durée max d'un passage (GitHub coupe à 60 min)
+  budget_jetons_jour: 350000      # IA Mistral gratuite : ~1,45 million de jetons/jour pour les 3 veilles (10 $/mois)
   transcription_complete_dans_notion: true   # ajoute la transcription intégrale des podcasts dans la page Notion
 
 # ---------------------------------------------------------------------

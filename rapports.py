@@ -1981,8 +1981,10 @@ def save_state(st):
     os.replace(tmp, STATE_PATH)
 
 
-def make_llm(st):
+def make_llm(st, cfg=None):
     llm = V.LLM(st, {})
+    if cfg:  # passage normal : budget de jetons du jour pour cette veille
+        llm.budget_day = int(cfg["limites"].get("budget_jetons_jour", 650000))
     # une seule clé pour les trois veilles (MISTRAL_API_KEY, sinon GEMINI_API_KEY) : lue par veille.LLM
     return llm
 
@@ -1997,7 +1999,7 @@ def run(args):
     notion = RapNotion(cfg)
     if not args.dry_run:
         notion.ensure(st, legi.dash)
-    llm = make_llm(st)
+    llm = make_llm(st, cfg)
     vp = L.Fetcher()
     R = Rapports(cfg, st, notion, llm, legi, vp, args.dry_run)
     D = None
@@ -2022,7 +2024,8 @@ def run(args):
            f"portée locale), {c['fiches']} fiche(s) rédigée(s) (dont {c.get('reprises', 0)} refaite(s)), "
            f"{len(st['queue'])} en attente, {old} ancienne(s) fiche(s) à refaire. Super fiches : {dc['sujets']} "
            f"nouveau(x) sujet(s), {dc['super']} super fiche(s) rédigée(s) ou mise(s) à jour "
-           f"({len(st.get('dossiers', {}).get('sujets', {}))} sujet(s) au total). Appels IA : {llm.calls}")
+           f"({len(st.get('dossiers', {}).get('sujets', {}))} sujet(s) au total). Appels IA : {llm.calls}. "
+           f"Budget IA : {llm.budget_txt() if hasattr(llm, 'budget_txt') else '-'}")
     log.info(msg)
     summ = V.env("GITHUB_STEP_SUMMARY")
     if summ:

@@ -740,6 +740,38 @@ class LLM:
         self._groq = None
         self.calls = {}
         self.skip = set()  # modèles en erreur pendant ce passage
+        # Budget de jetons Mistral par jour et par veille (0 = illimité). L'offre gratuite de Mistral donne
+        # 10 $ de crédit par mois, soit ~50 millions de jetons avec ministral-14b (0,20 $/million) : les trois
+        # veilles se partagent ~1,45 million de jetons par jour (réglage « budget_jetons_jour » de chaque veille).
+        self.budget_day = 0
+        b = state.setdefault("ia_budget", {})
+        if b.get("jour") != today:
+            b.update(jour=today, utilise=0)
+        month = today[:7]
+        if b.get("mois") != month:
+            b.update(mois=month, mois_utilise=0)
+        self.budget = b
+
+    # ----- budget de jetons (Mistral) -----
+    def budget_txt(self):
+        b = self.budget
+        lim = f" sur {self.budget_day:,}".replace(",", " ") if self.budget_day else ""
+        return (f"{b.get('utilise', 0):,}".replace(",", " ") + lim + " jetons aujourd'hui, "
+                + f"{b.get('mois_utilise', 0):,}".replace(",", " ") + " ce mois-ci")
+
+    def _budget_check(self, prompt, max_tokens):
+        if not self.budget_day:
+            return
+        est = len(prompt) / 3.2 + min(int(max_tokens), 32000) * 0.25  # estimation prudente avant l'appel
+        if self.budget.get("utilise", 0) + est > self.budget_day:
+            for m in self.gemini_models():  # budget du jour atteint : plus d'appel Mistral aujourd'hui
+                if self.is_mistral(m):
+                    self.exhausted[m] = self.today
+            raise QuotaExhausted(f"budget IA du jour atteint ({self.budget_txt()})")
+
+    def _budget_add(self, n):
+        self.budget["utilise"] = self.budget.get("utilise", 0) + int(n)
+        self.budget["mois_utilise"] = self.budget.get("mois_utilise", 0) + int(n)
 
     # ----- liste des modèles -----
     def gemini_models(self):
@@ -750,9 +782,10 @@ class LLM:
             # « léger » pour le tri, les notes et les résumés d'articles ; « principal » pour les fiches.
             # Noms exacts des modèles ouverts à l'offre gratuite (rubrique « Limites » de la console Mistral) :
             # les alias « …-latest » peuvent désigner une version plus récente, non ouverte à cette offre.
-            # Principal : mistral-large-2512 (250 000 jetons/min) ; léger : ministral-14b-2512 (937 500 jetons/min).
+            # mistral-large-2512 répond « This model is not available in your subscription tier » (403) avec l'offre
+            # gratuite : ministral-14b-2512 (937 500 jetons/min, 0,5 requête/s) sert aux deux usages.
             self._gemini = [env("MISTRAL_MODELE_LEGER", "ministral-14b-2512") + "~lite",
-                            env("MISTRAL_MODELE", "mistral-large-2512")]
+                            env("MISTRAL_MODELE", "ministral-14b-2512")]
             return self._gemini
         forced = env("GEMINI_MODELS")
         if forced:
@@ -982,6 +1015,7 @@ class LLM:
         body = {"model": name, "temperature": 0.2, "max_tokens": min(int(max_tokens), 32000),
                 "messages": [{"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
         interval = float(env("MISTRAL_INTERVALLE_SECONDES", "2"))
+        self._budget_check(prompt, max_tokens)
         waited, last = 0.0, ""
         for attempt in range(8):
             gap = interval - (time.time() - self._m_last)
@@ -998,7 +1032,10 @@ class LLM:
                 continue
             self.calls[name] = self.calls.get(name, 0) + 1
             if r.status_code == 200:
-                ch = (r.json().get("choices") or [{}])[0]
+                js = r.json()
+                use = (js.get("usage") or {}).get("total_tokens") or int(len(prompt) / 3.2)
+                self._budget_add(use)
+                ch = (js.get("choices") or [{}])[0]
                 content = (ch.get("message") or {}).get("content") or ""
                 if isinstance(content, list):  # réponse en morceaux (modèles « raisonnants »)
                     content = "".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
@@ -1007,6 +1044,12 @@ class LLM:
                 return parse_json(content)
             msg = r.text
             last = f"HTTP {r.status_code} {msg[:200]}"
+            if r.status_code in (402, 403, 429) and re.search(
+                    r"included (api )?usage|usage limit|credit|paused|spending limit|billing", msg, re.I):
+                for m in self.gemini_models():  # crédit du mois épuisé : plus d'appel Mistral aujourd'hui
+                    if self.is_mistral(m):
+                        self.exhausted[m] = self.today
+                raise QuotaExhausted(f"Mistral : crédit gratuit du mois épuisé ou accès suspendu ({msg[:200]})")
             if r.status_code == 429:
                 if re.search(r"month|monthly|mensuel", msg, re.I):
                     for m in self.gemini_models():  # quota mensuel atteint : plus d'appel Mistral aujourd'hui
@@ -1079,13 +1122,29 @@ def parse_json(text):
     try:
         return json.loads(t)
     except json.JSONDecodeError:
-        a, b = t.find("{"), t.rfind("}")
-        if a >= 0 and b > a:
+        pass
+    a, b = t.find("{"), t.rfind("}")
+    if a >= 0 and b > a:
+        try:
+            return json.loads(t[a:b + 1], strict=False)
+        except json.JSONDecodeError:
+            pass
+    # Réparation des petites erreurs de syntaxe (guillemets non échappés, virgule manquante, réponse coupée)
+    try:
+        import json_repair
+        out = json_repair.loads(t[a:] if a >= 0 else t)
+        if isinstance(out, (dict, list)) and out:
+            log.info("Réponse de l'IA réparée (JSON mal formé)")
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    a, b = t.find("["), t.rfind("]")
+    if a >= 0 and b > a:
+        try:
             return json.loads(t[a:b + 1])
-        a, b = t.find("["), t.rfind("]")
-        if a >= 0 and b > a:
-            return json.loads(t[a:b + 1])
-        raise ValueError("JSON introuvable dans la réponse")
+        except json.JSONDecodeError:
+            pass
+    raise ValueError("JSON introuvable ou illisible dans la réponse")
 
 
 def pick(values, allowed, maxn):
@@ -1605,6 +1664,7 @@ def run(args):
     log.info("File d'attente : %d éléments (%d nouveaux)", len(st["pending"]), len(new))
 
     llm = LLM(st, cfg)
+    llm.budget_day = int(lim.get("budget_jetons_jour", 350000))
     done_articles = done_podcasts = 0
     quota_out = False
 
@@ -1751,7 +1811,7 @@ def run(args):
 
     msg = (f"Terminé : {done_articles} articles et {done_podcasts} podcasts ajoutés à Notion, "
            f"{done_fiches} fiche(s) de révision mise(s) à jour. "
-           f"En attente : {len(st['pending'])}. Appels IA : {llm.calls}")
+           f"En attente : {len(st['pending'])}. Appels IA : {llm.calls}. Budget IA : {llm.budget_txt()}")
     log.info(msg)
     summary = env("GITHUB_STEP_SUMMARY")
     if summary:

@@ -245,6 +245,8 @@ def save_state(st):
 # =====================================================================
 def make_llm(st, cfg):
     llm = V.LLM(st, {})
+    if st:  # passage normal (pas le diagnostic) : budget de jetons du jour pour cette veille
+        llm.budget_day = int((cfg.get("limites") or {}).get("budget_jetons_jour", 450000))
     # une seule clé pour les trois veilles (MISTRAL_API_KEY, sinon GEMINI_API_KEY) : lue par veille.LLM
     return llm
 
@@ -1408,7 +1410,8 @@ def run(args):
     c = L.counts
     msg = (f"Terminé : {c['textes_nouveaux']} nouveaux textes, {c['dossiers_lus']} dossiers relus, "
            f"{c['evenements']} alerte(s), {c['fil']} élément(s) ajoutés au fil, {c['fiches']} fiche(s) rédigée(s). "
-           f"Accès au site : {fetch.mode} ({fetch.n_ok} pages lues, {fetch.n_fail} échecs). Appels IA : {llm.calls}")
+           f"Accès au site : {fetch.mode} ({fetch.n_ok} pages lues, {fetch.n_fail} échecs). Appels IA : {llm.calls}. "
+           f"Budget IA : {llm.budget_txt() if hasattr(llm, 'budget_txt') else '-'}")
     log.info(msg)
     summ = V.env("GITHUB_STEP_SUMMARY")
     if summ:

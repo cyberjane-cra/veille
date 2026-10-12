@@ -8,6 +8,7 @@ debut_legislature: "2024-07-18"   # les panoramas antérieurs sont ignorés
 
 limites:
   duree_max_minutes: 50              # durée max d'un passage (le workflow coupe à 70 min)
+  budget_jetons_jour: 450000        # IA Mistral gratuite : ~1,45 million de jetons/jour pour les 3 veilles (10 $/mois)
   reserve_minutes_fiches: 12         # temps gardé en fin de passage pour rédiger les fiches
   dossiers_par_passage: 400          # dossiers législatifs relus au plus par passage
   heures_entre_lectures_actif: 6     # texte en cours avec une étape depuis moins de 5 mois

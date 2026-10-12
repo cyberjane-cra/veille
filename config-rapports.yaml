@@ -5,6 +5,7 @@
 
 limites:
   duree_max_minutes: 45            # durée max d'un passage
+  budget_jetons_jour: 650000       # IA Mistral gratuite : ~1,45 million de jetons/jour pour les 3 veilles (10 $/mois)
   jours_premier_passage: 21        # au premier passage : rapports des 3 dernières semaines
   liens_max_par_page: 40           # sites sans flux RSS : liens examinés par page
   tri_par_passage: 80              # publications triées par l'IA (vrai rapport ? portée nationale ?)
