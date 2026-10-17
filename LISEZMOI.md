@@ -133,3 +133,23 @@ Vues conseillées, à créer dans Notion avec **+ Ajouter une vue** :
 Les fiches s'enrichissent au fil de l'eau. L'IA reprend la fiche existante, y intègre les nouveaux articles, fusionne les doublons et retire ce qui est dépassé. Les réglages (seuils, fréquence, nombre de fiches par passage) sont dans `config.yaml`, section `fiches`.
 
 ⚠️ Ne modifiez pas le contenu des fiches à la main : il est remplacé à chaque mise à jour. Pour vos notes personnelles, créez une sous-page dans la fiche : elle sera conservée.
+
+---
+
+## Fiches concours (dossier « FICHES CONCOURS »)
+
+Le dossier **🎓 FICHES CONCOURS** contient une sous-page 🎯 par sujet de concours (69 sujets, de « Conflits maritimes, piraterie » à « La guerre commerciale »). Toutes les pages sont créées au premier passage, dans l'ordre de la liste ; une page reste « en attente » tant que moins de 2 articles portent sur son sujet.
+
+**Comment les articles sont rattachés.** Chaque sujet a un *périmètre* précis dans `concours.yaml` (ce qu'il couvre, et ce qui relève d'un autre sujet). L'IA lit la synthèse de chaque article et le rattache à 0, 1, 2 ou 3 sujets au plus, seulement s'il apporte une matière utilisable en dissertation. Les articles déjà présents dans Notion sont classés aussi (rattrapage de 360 articles par passage) ; les fiches sont rédigées une fois ce rattrapage terminé. La colonne **Fiches concours** du tableau de veille indique les sujets de chaque article : filtrez dessus pour retrouver tous les articles d'un sujet.
+
+**Contenu d'une fiche.** Même format que les fiches de révision, enrichi pour l'épreuve :
+- problématique (définition des termes, enjeux, tensions, question centrale) et sujets possibles ;
+- notions clés, à retenir, proposition de plan (I/II/III, A/B) ;
+- grandes idées et arguments, chacun étayé par des exemples et des chiffres tirés des articles (liens gris vers les fiches-articles) ;
+- chiffres clés, débats et points de vue, chronologie récente ;
+- repères de cours (dates, traités, auteurs) : connaissances générales de l'IA, signalées comme telles, à vérifier ;
+- synthèse avec ouverture, puis la liste de tous les articles rattachés.
+
+Les fiches s'enrichissent au fil de l'eau, au plus tous les 4 jours (ou dès 8 nouveaux articles) ; ⭐ pendant 3 jours sur la fiche et sur le dossier. Pour préserver la veille des articles, les fiches concours s'arrêtent dès que 70 % du budget IA du jour est consommé : le remplissage initial des 69 fiches prend donc quelques jours.
+
+**Modifier la liste des sujets** : éditez `concours.yaml` sur GitHub. Vous pouvez renommer un titre ou préciser un périmètre ; ne changez jamais un `code`. Pour un nouveau sujet, ajoutez un bloc avec un nouveau code (C70…). Les réglages (seuils, fréquence, part du budget) sont dans `config.yaml`, section `fiches_concours`.

@@ -1,0 +1,288 @@
+# =====================================================================
+#  FICHES CONCOURS — un sujet = une sous-page du dossier « FICHES CONCOURS » dans Notion
+# =====================================================================
+# Chaque article de la veille est rattaché par l'IA à 0, 1, 2 ou 3 sujets au plus,
+# en s'appuyant sur le « perimetre » ci-dessous : c'est lui qui rend le classement précis.
+#
+# - code      : identifiant fixe. NE LE CHANGEZ JAMAIS (il relie la fiche à ses articles).
+#               Pour ajouter un sujet, donnez-lui un nouveau code (C70, C71…).
+# - titre     : nom de la page Notion (modifiable : la page est renommée au passage suivant).
+# - perimetre : ce que couvre le sujet, et ce qui relève d'un autre sujet (« pas : … »).
+# Pour retirer un sujet, supprimez ses lignes : sa page Notion n'est plus mise à jour (supprimez-la à la main).
+
+sujets:
+  - code: C01
+    titre: "Conflits maritimes, piraterie"
+    perimetre: "Tensions et incidents en mer (mer de Chine méridionale, mer Rouge et Houthis, mer Noire, détroits d'Ormuz, de Malacca, de Taïwan), liberté de navigation, droit de la mer (CNUDM, ZEE), piraterie (golfe de Guinée, Somalie), sécurité des routes maritimes et des câbles sous-marins."
+
+  - code: C02
+    titre: "Nouvelles frontières géopolitiques : pôles, espace, fonds marins"
+    perimetre: "Les espaces communs disputés : course à l'espace (constellations, militarisation, Lune, débris), exploitation et protection des grands fonds marins (AIFM, nodules), Antarctique et pôles comme nouveaux territoires de rivalité. Pas : l'Arctique en tant que région (C20)."
+
+  - code: C03
+    titre: "Retour des frontières ?"
+    perimetre: "Réaffirmation des frontières : murs et clôtures, rétablissement des contrôles (Schengen), annexions et révisionnisme territorial, conflits frontaliers, irrédentisme, frontières numériques et souveraineté. Débat « fin des frontières » de la mondialisation contre retour du territoire."
+
+  - code: C04
+    titre: "Conflit en Ukraine"
+    perimetre: "Guerre russo-ukrainienne : opérations militaires, soutien occidental et aide militaire, négociations et cessez-le-feu, reconstruction, adhésion de l'Ukraine à l'UE et à l'OTAN, conséquences économiques et énergétiques de la guerre."
+
+  - code: C05
+    titre: "Conflit Israël-Gaza"
+    perimetre: "Guerre à Gaza depuis le 7 octobre 2023 : opérations militaires, situation humanitaire, otages, Cisjordanie et colonisation, Hezbollah et Liban, cessez-le-feu, gouvernance de Gaza après la guerre."
+
+  - code: C06
+    titre: "Conflit au Soudan / Congo"
+    perimetre: "Guerre civile au Soudan (armée contre Forces de soutien rapide, Darfour, crise humanitaire) ; conflit dans l'est de la RDC (M23, Rwanda, minerais, Kivu), médiations et accords de paix."
+
+  - code: C07
+    titre: "Guerre civile en Éthiopie"
+    perimetre: "Éthiopie : guerre du Tigré et accord de Pretoria, conflits Amhara et Oromia, rivalités avec l'Érythrée et l'Égypte (barrage GERD), accès à la mer, Corne de l'Afrique."
+
+  - code: C08
+    titre: "États-Unis et Europe"
+    perimetre: "Relation transatlantique : alliance et dépendance de sécurité, tensions commerciales et droits de douane entre États-Unis et UE, partage du fardeau, autonomie stratégique européenne face à Washington, divergences de valeurs et de régulation (numérique)."
+
+  - code: C09
+    titre: "Avenir de l'OTAN"
+    perimetre: "L'OTAN : sommets, objectifs de dépenses (2 %, 5 %), élargissement (Finlande, Suède, Ukraine), dissuasion sur le flanc est, article 5, engagement américain, pilier européen de l'Alliance, défis futurs."
+
+  - code: C10
+    titre: "Politique étrangère de Trump"
+    perimetre: "Doctrine et décisions de politique étrangère de Donald Trump : America First, transactionnalisme, retraits d'organisations et d'accords, rapports aux alliés et aux adversaires, usage des droits de douane et des sanctions comme instruments de puissance."
+
+  - code: C11
+    titre: "Politique étrangère chinoise"
+    perimetre: "Stratégie internationale de la Chine : nouvelles routes de la soie, diplomatie de Xi Jinping, Taïwan, rapports avec le Sud global, la Russie, l'Europe, BRICS et OCS, ambitions de réforme de l'ordre international, puissance militaire chinoise."
+
+  - code: C12
+    titre: "Relations sino-américaines"
+    perimetre: "Rivalité États-Unis–Chine : compétition technologique (semi-conducteurs, contrôles à l'exportation), guerre commerciale bilatérale, Taïwan, mer de Chine, dialogue et rencontres au sommet, « piège de Thucydide », découplage ou réduction des risques."
+
+  - code: C13
+    titre: "Corée du Nord"
+    perimetre: "Corée du Nord : programmes nucléaire et balistique, essais, sanctions, rapprochement avec la Russie (soldats, munitions), relations avec la Corée du Sud, le Japon, la Chine et les États-Unis."
+
+  - code: C14
+    titre: "Zone indopacifique pour la France"
+    perimetre: "Les enjeux de la zone indopacifique vue de Paris : territoires ultramarins (Nouvelle-Calédonie, Polynésie, La Réunion, Mayotte), ZEE et souveraineté, forces prépositionnées, sécurité régionale, rivalité sino-américaine dans la zone."
+
+  - code: C15
+    titre: "Les États-Unis et l'Amérique latine"
+    perimetre: "Politique des États-Unis en Amérique latine : Venezuela, Cuba, Mexique (migrations, cartels, commerce), Panama, doctrine Monroe, influence chinoise concurrente, interventions et pressions américaines."
+
+  - code: C16
+    titre: "Le continent africain, la France et l'Europe"
+    perimetre: "Relations de l'Afrique avec l'Europe et l'UE : partenariats UE–UA, migrations, aide, Global Gateway, concurrence russe, chinoise, turque et du Golfe en Afrique, recompositions au Sahel. Pour la seule politique africaine de la France, voir C64."
+
+  - code: C17
+    titre: "Les Balkans : la France et l'Europe"
+    perimetre: "Balkans occidentaux : élargissement de l'UE (Serbie, Monténégro, Albanie, Macédoine du Nord, Bosnie), Kosovo, tensions ethniques, influences russe, chinoise et turque, politique française dans la région."
+
+  - code: C18
+    titre: "La Turquie : la France et l'Europe"
+    perimetre: "Turquie : politique étrangère d'Erdogan, relations avec l'UE (candidature, migrations), OTAN, Méditerranée orientale et Chypre, Syrie, rapports et rivalités avec la France."
+
+  - code: C19
+    titre: "Les États baltes : Russie, Europe, OTAN"
+    perimetre: "Estonie, Lettonie, Lituanie : menace russe, minorités russophones, Kaliningrad et corridor de Suwalki, présence avancée de l'OTAN, mer Baltique (sabotages de câbles, flotte fantôme), énergie."
+
+  - code: C20
+    titre: "L'Arctique"
+    perimetre: "L'Arctique : fonte des glaces, nouvelles routes maritimes, ressources, Groenland, militarisation russe, Conseil de l'Arctique, ambitions chinoises et américaines dans la région."
+
+  - code: C21
+    titre: "Le Golfe"
+    perimetre: "Monarchies du Golfe (Arabie saoudite, Émirats, Qatar…) et Iran : rivalités régionales, diplomatie et médiations, puissance financière et énergétique, Yémen, normalisation avec Israël, relations avec les États-Unis, la Chine et la France."
+
+  - code: C22
+    titre: "Processus de paix au Moyen-Orient"
+    perimetre: "Négociations et cadres de paix israélo-arabes et israélo-palestiniens : accords d'Abraham, solution à deux États, reconnaissance de la Palestine, plans de paix, médiations (Égypte, Qatar, États-Unis), conférences internationales."
+
+  - code: C23
+    titre: "L'ONU et le Conseil de sécurité"
+    perimetre: "Organisation des Nations unies : Conseil de sécurité, veto et blocages, résolutions, réforme du Conseil, Assemblée générale, Secrétaire général, crise budgétaire et légitimité de l'ONU."
+
+  - code: C24
+    titre: "Le multilatéralisme"
+    perimetre: "Crise et recomposition du multilatéralisme : contestation des institutions internationales, minilatéralisme, coalitions ad hoc, BRICS et forums du Sud global, défense de l'ordre international fondé sur des règles."
+
+  - code: C25
+    titre: "Les grands sommets"
+    perimetre: "Sommets internationaux et leurs résultats : G7, G20, BRICS, COP, sommets UE, OTAN, ASEAN, sommets bilatéraux majeurs ; utilité et limites de la diplomatie des sommets."
+
+  - code: C26
+    titre: "Les ONG"
+    perimetre: "Organisations non gouvernementales : rôle humanitaire, plaidoyer, influence sur les normes internationales, financement, restrictions et répression des ONG, sécurité des travailleurs humanitaires."
+
+  - code: C27
+    titre: "Les multinationales"
+    perimetre: "Firmes multinationales comme acteurs des relations internationales : puissance des géants du numérique, stratégies face aux sanctions et aux tensions géopolitiques, relocalisations, fiscalité internationale (impôt minimal), devoir de vigilance."
+
+  - code: C28
+    titre: "Les fonds privés"
+    perimetre: "Acteurs financiers privés dans les relations internationales : fonds souverains, fonds d'investissement et capital-risque, sociétés militaires privées et financements privés de la défense, philanthropie, poids des marchés sur les États."
+
+  - code: C29
+    titre: "L'Union africaine, l'ASEAN, le Mercosur"
+    perimetre: "Organisations régionales hors Europe : Union africaine, CEDEAO, Alliance des États du Sahel, ASEAN, Mercosur et accord UE–Mercosur ; intégration régionale et régionalisme comme acteur international."
+
+  - code: C30
+    titre: "La CPI"
+    perimetre: "Cour pénale internationale : mandats d'arrêt (Poutine, Netanyahou…), procédures, coopération des États, retraits et sanctions contre la Cour, compétence universelle et autres juridictions pénales internationales."
+
+  - code: C31
+    titre: "Criminalité transnationale : terrorisme, piraterie, milices"
+    perimetre: "Acteurs armés et criminels non étatiques : trafics (drogue, armes, êtres humains), cartels, mafias, groupes armés et milices (Wagner / Africa Corps), économies criminelles, liens entre crime et terrorisme."
+
+  - code: C32
+    titre: "Bretton Woods et l'ordre monétaire international"
+    perimetre: "FMI, Banque mondiale, rôle du dollar et dédollarisation, système monétaire international, banques centrales et coordination monétaire, monnaies numériques de banque centrale, réforme des institutions de Bretton Woods."
+
+  - code: C33
+    titre: "La société civile : individus, médias, opinions"
+    perimetre: "Opinions publiques, médias et individus dans les relations internationales : mobilisations transnationales, désinformation et guerre informationnelle, influence des réseaux sociaux, liberté de la presse, diasporas."
+
+  - code: C34
+    titre: "Énergies et RI"
+    perimetre: "Géopolitique de l'énergie : pétrole et gaz (OPEP+, GNL, prix), sécurité d'approvisionnement, dépendances (gaz russe), nucléaire civil, transition énergétique et ses rivalités, sanctions énergétiques."
+
+  - code: C35
+    titre: "Terres rares et RI"
+    perimetre: "Terres rares et minerais critiques : domination chinoise et restrictions d'exportation, lithium, cobalt, nickel, accords miniers, stratégies européennes et américaines de sécurisation des chaînes d'approvisionnement."
+
+  - code: C36
+    titre: "Droit d'ingérence humanitaire"
+    perimetre: "Ingérence humanitaire et responsabilité de protéger (R2P) : interventions au nom de la protection des civils, accès humanitaire, souveraineté contre protection, débats sur la légitimité des interventions."
+
+  - code: C37
+    titre: "Environnement et RI"
+    perimetre: "Climat et environnement dans les relations internationales : COP et négociations climatiques, financement climat, biodiversité, migrations et conflits climatiques, diplomatie environnementale, pollution plastique."
+
+  - code: C38
+    titre: "Aides au développement"
+    perimetre: "Aide publique au développement : montants et coupes (USAID, Europe), objectifs de développement durable, efficacité de l'aide, nouveaux bailleurs (Chine, Golfe), aide comme instrument d'influence."
+
+  - code: C39
+    titre: "Dette des pays pauvres"
+    perimetre: "Endettement des pays en développement : restructurations (cadre commun du G20, Club de Paris), créances chinoises, défauts de paiement, coût du service de la dette, réformes de l'architecture financière."
+
+  - code: C40
+    titre: "Droits de l'homme"
+    perimetre: "Protection internationale des droits humains : violations et répression, Conseil des droits de l'homme, liberté d'expression, droits des femmes et des minorités, universalisme contre relativisme, recul démocratique."
+
+  - code: C41
+    titre: "Le désarmement, la non-prolifération"
+    perimetre: "Maîtrise des armements : TNP, New START et fin des traités, programme nucléaire iranien, AIEA, essais nucléaires, armes chimiques et biologiques, contrôle des armes autonomes, course aux armements."
+
+  - code: C42
+    titre: "Lutte internationale contre le terrorisme"
+    perimetre: "Coopération et politiques antiterroristes : État islamique, al-Qaida et leurs affiliés (Sahel, Afghanistan, Syrie), coalitions, renseignement et contre-terrorisme, prévention de la radicalisation, financement du terrorisme."
+
+  - code: C43
+    titre: "Cyberconflits et cybersécurité"
+    perimetre: "Cyberattaques étatiques et criminelles, rançongiciels, espionnage numérique, guerre hybride, protection des infrastructures critiques, normes internationales du cyberespace, souveraineté numérique, IA militaire."
+
+  - code: C44
+    titre: "Guerres justes"
+    perimetre: "Légitimité et justification du recours à la force : jus ad bellum, légitime défense, guerre préventive, éthique de la guerre, frappes ciblées et drones, débats moraux sur l'usage de la force."
+
+  - code: C45
+    titre: "Le retour des religions"
+    perimetre: "Le religieux dans les relations internationales : nationalismes religieux, islam politique, évangéliques, diplomatie du Vatican, Église orthodoxe russe, conflits à dimension religieuse."
+
+  - code: C46
+    titre: "Revendications identitaires : culturelles, linguistiques, religieuses"
+    perimetre: "Mouvements identitaires et séparatistes, minorités nationales, autodétermination (Kurdes, Catalogne, Nouvelle-Calédonie…), politiques mémorielles, nationalismes et populismes identitaires."
+
+  - code: C47
+    titre: "Coopération sanitaire (OMS)"
+    perimetre: "Santé mondiale : OMS (retrait américain, financement), accord sur les pandémies, épidémies (mpox, Ebola, grippe aviaire), accès aux vaccins et médicaments, diplomatie sanitaire."
+
+  - code: C48
+    titre: "Migrations internationales"
+    perimetre: "Flux migratoires et réfugiés : politiques migratoires de l'UE (pacte asile et migration) et des États-Unis, routes migratoires, instrumentalisation des migrants, HCR, déplacés internes, accords avec les pays de transit."
+
+  - code: C49
+    titre: "Géopolitique de l'eau"
+    perimetre: "L'eau comme enjeu de puissance et de conflit : fleuves transfrontaliers (Nil, Indus, Tigre-Euphrate, Mékong), barrages, stress hydrique, coopération et diplomatie de l'eau, eau dans les conflits armés."
+
+  - code: C50
+    titre: "Commerce international (OMC)"
+    perimetre: "Règles du commerce mondial : OMC (blocage de l'organe d'appel, réformes), accords de libre-échange, chaînes de valeur, protectionnisme et politiques industrielles. Pas : l'escalade tarifaire elle-même (C69)."
+
+  - code: C51
+    titre: "Le génocide"
+    perimetre: "Génocide et crimes de masse : qualification juridique, Convention de 1948, procédures devant la CIJ (Afrique du Sud contre Israël, Gambie contre Birmanie), Rwanda, Srebrenica, Darfour, Ouïghours, prévention et mémoire."
+
+  - code: C52
+    titre: "Le droit de la guerre"
+    perimetre: "Droit international humanitaire (jus in bello) : protection des civils, proportionnalité, crimes de guerre, armes interdites, statut des combattants et des prisonniers, poursuites pour violations."
+
+  - code: C53
+    titre: "La reconnaissance des États"
+    perimetre: "Reconnaissance internationale des États et des gouvernements : Palestine, Taïwan, Kosovo, Somaliland, régime taliban, critères de l'État, sécessions et statut des territoires contestés."
+
+  - code: C54
+    titre: "Les conventions de Genève"
+    perimetre: "Conventions de Genève et leurs protocoles, CICR, respect et violations de ces textes dans les conflits actuels, protection des blessés, prisonniers et populations civiles."
+
+  - code: C55
+    titre: "Diplomatie et renseignement"
+    perimetre: "Pratique diplomatique et services de renseignement : négociations, diplomatie secrète et de médiation, réseau diplomatique, espionnage, ingérences étrangères, affaires de renseignement, coopération des services."
+
+  - code: C56
+    titre: "Politiques de sanction"
+    perimetre: "Sanctions internationales : sanctions contre la Russie, l'Iran, la Corée du Nord, contournement et efficacité, extraterritorialité du droit américain, gel des avoirs, sanctions secondaires."
+
+  - code: C57
+    titre: "Opérations de maintien de la paix"
+    perimetre: "Opérations de paix de l'ONU et des organisations régionales : missions (Liban, RDC, Soudan du Sud…), retraits (Mali), mandats, efficacité, financement, missions de l'UA et de l'UE."
+
+  - code: C58
+    titre: "La France est-elle encore une grande puissance ?"
+    perimetre: "Rang et puissance de la France : siège au Conseil de sécurité, dissuasion, réseau diplomatique, influence et soft power, déclassement relatif, contraintes budgétaires, puissance moyenne d'influence globale."
+
+  - code: C59
+    titre: "La France et l'UE : politiques étrangères"
+    perimetre: "Politique étrangère et de défense de l'UE et place de la France : PESC, défense européenne, autonomie stratégique, Boussole stratégique, initiatives françaises en Europe, unanimité et majorité qualifiée."
+
+  - code: C60
+    titre: "La France et l'Indopacifique"
+    perimetre: "Diplomatie française dans l'Indopacifique : partenariats stratégiques (Inde, Australie, Japon, Indonésie), ventes d'armes (Rafale, sous-marins), affaire AUKUS, stratégie indopacifique de la France et de l'UE."
+
+  - code: C61
+    titre: "La France et le Moyen-Orient"
+    perimetre: "Politique de la France au Moyen-Orient : reconnaissance de la Palestine, Liban, Syrie, Iran, Golfe, Israël, ventes d'armes, lutte antiterroriste dans la région, influence française."
+
+  - code: C62
+    titre: "La France et la Russie"
+    perimetre: "Relations franco-russes : soutien français à l'Ukraine, dialogue avec Moscou, menaces et ingérences russes visant la France (désinformation, cyber), rivalité en Afrique, débat sur l'envoi de troupes."
+
+  - code: C63
+    titre: "Le couple franco-allemand"
+    perimetre: "Relation France–Allemagne : convergences et divergences (défense, énergie, budget, commerce, Mercosur), projets communs (SCAF, char du futur), traité d'Aix-la-Chapelle, moteur de l'Europe."
+
+  - code: C64
+    titre: "La France et l'Afrique"
+    perimetre: "Politique africaine de la France : retrait militaire du Sahel, du Tchad, du Sénégal, Françafrique et sentiment antifrançais, nouveaux partenariats, franc CFA, restitutions, présence économique française."
+
+  - code: C65
+    titre: "Les opérations extérieures de la France"
+    perimetre: "OPEX et engagements militaires français à l'étranger : Barkhane et son bilan, missions de l'OTAN en Roumanie et en Estonie, opérations navales, bases à l'étranger, coût et doctrine des interventions."
+
+  - code: C66
+    titre: "La France dans la mondialisation"
+    perimetre: "Place de la France dans l'économie mondiale : commerce extérieur et déficit, attractivité, réindustrialisation et souveraineté économique, grandes entreprises françaises, dette publique et contrainte des marchés."
+
+  - code: C67
+    titre: "La francophonie"
+    perimetre: "Francophonie : OIF et ses sommets, langue française dans le monde, diplomatie culturelle et d'influence, recul ou dynamisme du français en Afrique, audiovisuel extérieur (RFI, France 24)."
+
+  - code: C68
+    titre: "La puissance militaire française"
+    perimetre: "Armées françaises : loi de programmation militaire, budget de la défense, dissuasion nucléaire, industrie de défense et exportations d'armement, économie de guerre, format et capacités des armées."
+
+  - code: C69
+    titre: "La guerre commerciale"
+    perimetre: "Escalade des droits de douane et représailles : hausses tarifaires américaines, ripostes chinoises et européennes, accords tarifaires, restrictions aux exportations, effets sur la croissance et les chaînes d'approvisionnement."

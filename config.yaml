@@ -157,3 +157,19 @@ fiches:
   articles_par_fiche_max: 50      # nombre max d'articles envoyés à l'IA pour une mise à jour
   etoile_jours: 3                 # durée pendant laquelle une fiche enrichie garde son ⭐
   liens_articles_max: 400         # fin de fiche : liens vers les articles rattachés (les plus récents d'abord)
+
+# ---------------------------------------------------------------------
+# FICHES CONCOURS (dossier « FICHES CONCOURS » dans Notion ; liste des sujets : concours.yaml)
+# ---------------------------------------------------------------------
+fiches_concours:
+  actif: true
+  min_articles: 2                 # une fiche concours est rédigée dès 2 articles rattachés au sujet
+  maj_apres_jours: 4              # une fiche est mise à jour au plus tous les 4 jours…
+  nouveaux_articles_pour_maj_immediate: 8    # … sauf si 8 nouveaux articles sont arrivés entre-temps
+  fiches_par_passage: 3           # nombre max de fiches concours rédigées à chaque passage
+  articles_par_fiche_max: 25      # nombre max d'articles envoyés à l'IA pour une rédaction ou une mise à jour
+  classement_par_requete: 60      # articles classés ensemble (une requête IA pour 60 articles)
+  classement_requetes_par_passage: 6         # rattrapage : jusqu'à 360 articles classés par passage
+  reserve_budget_articles: 0.3    # les fiches concours s'arrêtent quand 70 % du budget IA du jour est consommé
+  etoile_jours: 3                 # durée pendant laquelle une fiche enrichie garde son ⭐
+  liens_articles_max: 400         # fin de fiche : liens vers les articles rattachés

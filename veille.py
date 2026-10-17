@@ -1809,8 +1809,18 @@ def run(args):
             log.warning("Fiches de révision : erreur %s", e)
         save_state(st)
 
+    # ---------- 5. Fiches concours ----------
+    done_concours = 0
+    if not dry and time_left(cfg) > 300:
+        import concours as concours_mod
+        try:
+            done_concours = concours_mod.update(sys.modules[__name__], st, cfg, notion, llm, lambda: time_left(cfg))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Fiches concours : erreur %s", e)
+        save_state(st)
+
     msg = (f"Terminé : {done_articles} articles et {done_podcasts} podcasts ajoutés à Notion, "
-           f"{done_fiches} fiche(s) de révision mise(s) à jour. "
+           f"{done_fiches} fiche(s) de révision et {done_concours} fiche(s) concours mise(s) à jour. "
            f"En attente : {len(st['pending'])}. Appels IA : {llm.calls}. Budget IA : {llm.budget_txt()}")
     log.info(msg)
     summary = env("GITHUB_STEP_SUMMARY")
@@ -1850,6 +1860,11 @@ def diagnostic(args):
         out.append(f"- Notion : OK (base « {DB_TITLE} » : {dbid})")
     except Exception as e:  # noqa: BLE001
         out.append(f"- Notion : ÉCHEC — {e}")
+    try:
+        import concours as concours_mod
+        out.append(f"- Fiches concours : {len(concours_mod.load_subjects(ROOT))} sujets lus dans concours.yaml")
+    except Exception as e:  # noqa: BLE001
+        out.append(f"- Fiches concours : concours.yaml ILLISIBLE — {e}")
     out.append("")
     out.append("## Sources")
     ok_count = 0
